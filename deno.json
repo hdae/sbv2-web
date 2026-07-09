@@ -48,6 +48,7 @@
   },
   "minimumDependencyAge": {
     "exclude": [
+      "jsr:@hdae/fetch-cache",
       "jsr:@hdae/yomi"
     ]
   }
