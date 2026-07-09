@@ -45,7 +45,7 @@
       "src/testing/**"
     ]
   },
-  "minimumDependencyAge":{
+  "minimumDependencyAge": {
     "exclude": [
       "jsr:@hdae/yomi"
     ]
