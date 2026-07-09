@@ -3,70 +3,70 @@
 Current design focus and a pitfalls index, so a reviewer or planner never starts
 cold. Keep this to a screenful.
 
-## Recently landed (2026-07-08 → 07-09)
+## Recently landed (2026-07-10, the 0.2.0 batch)
 
-- **yomi v0.2.0 follow-up.** `@hdae/yomi` narrowed its surface to an
-  `analyzeWithWords` facade and dropped the `/sbv2` subpath. The SBV2
-  `given_phone`/`given_tone` bridge (`toSbv2PhoneTone`) moved into
-  `src/text/phone_tone.ts`, reusing yomi's public building materials
-  (`moraToPhones`/`moraTones`/`pausePunct`) instead of duplicating them.
-  `synthesizeText` now calls `analyzeWithWords` (result + words from one analysis).
-  CLI consolidated to node-only at `examples/cli/` (single-shot or REPL); the web
-  path is exercised in the browser lab.
-- **Browser lab overhaul.** Worker lifecycle fixed (was terminating the Comlink
-  worker on every `audioUrl` change / StrictMode mount → 2nd-synth hang + frozen
-  load status); load flow reduced from 6 file inputs to 1 (DeBERTa streams from HF,
-  tokenizer bundled, dict auto-fetched from HF, 6-file path behind an Advanced
-  toggle); shadcn moved from Radix to Base UI (`base-nova`), Tailwind v3→v4;
-  provider is a Base UI Select.
-- **Two published entry points, browser-primary** (ADR-0002): `.` = core +
-  `Sbv2ModelAdapter` (onnxruntime-web); `./node` = same core + `Sbv2NodeModelAdapter`
-  (onnxruntime-node). ORT-agnostic core is `src/core.ts`, re-exported by both. The
-  adapter logic lives once in `src/runtime/adapter_core.ts`, parameterized by an
-  injected `OrtBackend` (int64/float32 factories + createSession); backend types via
-  `onnxruntime-common`.
-- **Node device support verified on real hardware:** cpu ✓, native `webgpu` (Dawn)
-  ✓ with the int4 model, `dml` works only with an fp16 DeBERTa (int4 MatMulNBits
-  breaks DirectML), `cuda` not bundled. See docs/known-issues.md.
-- **Release/bump toolkit (yomi-aligned).** Version single-source: `deno.json`
-  `version` ↔ baked `VERSION` (`src/core.ts`), synced by `deno task bump` in one
-  commit; drift is fail-loud via `scripts/version_sync.test.ts` (in `deno task
-  check`) + `scripts/verify_tag.ts` at release. GitHub Release on a `v<version>` tag
-  → JSR publish (`release-jsr.yml`). README rewritten in Japanese (yomi style);
-  `deno fmt` set to `proseWrap: preserve` so JP prose isn't broken mid-phrase.
+- **Review fixes.** styleVector rejects non-integer styleId / non-finite weight
+  (was silent NaN vectors); `fromOnnx` releases the acoustic session on partial
+  init failure; browser lab buttons are gated by a machine `busy` state (the
+  old string-match guard was broken by progress text); node `withDevice` no
+  longer clobbers caller `executionProviders` (device+EP together throws).
+- **Consumer API batch (light-sbv2 requests).** Per-call `SynthInput.scalars`
+  (ADR-0003); `release()` contract — idempotent, waits for in-flight, throws
+  after (ADR-0004); typed `readAivmxManifest` (default `stripAssets` drops the
+  multi-MB data-URL icons/voice samples); typed `Sbv2HyperParameters`
+  (spk2id/n_speakers/…) + adapter accessors; `fromAivmx({ metadata })` reuse;
+  `validateSynthInput`; `padSilence`/`concatWithSilence` +
+  `preSilenceSec`/`postSilenceSec`. Silent 44100 fallback removed (fromOnnx
+  sampleRate required).
+- **`@hdae/fetch-cache` (new sibling repo)** — generic Cache-API fetch layer
+  (`.`) + HF layer (`./hf`: revision→SHA resolve, named-spec parallel fetch,
+  size/sha256 validate with self-heal). sbv2-web's `getDeberta()` fetches the
+  DeBERTa 4-file set SHA-pinned; browser lab dropped bundled tokenizer assets
+  and the hand-rolled mutable-URL fetch; CLI runs with just `--aivmx`
+  (deberta/dict auto-fetch, verified end-to-end incl. cache hit).
 
 ## Pitfalls index
 
-- **Worker teardown MUST live in an empty-dependency effect** and null the ref in
-  cleanup; never key `release()`/`terminate()` on `audioUrl` or other state
-  (`examples/browser/src/App.tsx`).
-- **DeBERTa auto-fetch relies on HuggingFace CORS + range.** The dictionary is
-  fetched from HuggingFace by yomi's `getDictionary()` (v0.2.0, version-matched +
-  Cache-API-cached), so no same-origin file is needed; the gitignored
-  `public/dict/naist-jdic.jtd` is now unused (the Advanced path still accepts an
-  uploaded dict).
-- **Browser WebGPU (onnxruntime-web JSEP) still fails on int64 GatherND**; native
-  ORT WebGPU (Dawn, via `./node`) is a different impl and does run it. A browser fix
-  needs an OFFLINE int64→int32 rewrite (replace GatherND/ScatterND, saturate the two
-  ±(2^63−1) Slice sentinels, re-attach AIVM metadata) — large + unproven payoff.
+- **Publish order: fetch-cache BEFORE sbv2-web.** sbv2-web imports
+  `jsr:@hdae/fetch-cache@^0.1.0`; until it exists on JSR, local dev needs
+  `"links": ["../fetch-cache"]` in deno.json (removed for CI — a missing links
+  dir is a hard error). Examples/browser aliases fetch-cache to the sibling
+  repo source; switch to the pnpm jsr dep after publish (TODO in vite.config).
+- **getDeberta pins.** `DEBERTA_REVISION` + `PINNED_FILES` (sizes, model
+  sha256) are baked for the default revision only; replacing the HF model
+  means updating both (`src/assets/deberta.ts`).
+- **Deno lacks `Cache.keys()`** (2.8): fetch-cache `listCachedUrls` throws on
+  Deno rather than lying with `[]`; browsers are fine.
+- **Worker teardown MUST live in an empty-dependency effect**; UI actions are
+  gated by `busy`, and the adapter's release contract (ADR-0004) is the second
+  line of defense.
+- **Browser WebGPU (onnxruntime-web JSEP) still fails on int64 GatherND**;
+  native ORT WebGPU (Dawn, via `./node`) does run it. A browser fix needs an
+  OFFLINE int64→int32 rewrite — large + unproven payoff.
 - **Treat vocab.txt as LF/CRLF-agnostic** (`src/text/deberta_tokenizer.ts`).
-- **Browser tsc needs explicit `onnxruntime-common`/`onnxruntime-web` paths**
-  (`examples/browser/tsconfig.json`) to resolve the `/repo/src` imports.
 - **Two hand-written adapters would diverge** — keep synthesis in the single
   `Sbv2Adapter` core; a backend only supplies an `OrtBackend`.
+- **Manifest strip is the default** — `/speakers`-style catalogs must not
+  round-trip icons through `readAivmxManifest()` defaults; pass
+  `{ stripAssets: false }` only where icons/samples are actually served.
 
 ## Next / resume point
 
-- Manual checks DONE (user-verified): browser lab (HF dict auto-fetch, repeated
-  synth, Base UI Select) and node CLI (single-shot + REPL) both OK; `--device
-  webgpu/dml` verified on GPU hardware earlier.
-- Publish-prep candidate: the browser offline int64→int32 conversion (validation
-  spike first). `public/dict/naist-jdic.jtd` stays as-is (gitignored; vanishes at
-  the planned init squash).
-- Deferred to post-release: a lightweight Deno server over the node backend.
+- **Pending user actions:** publish `@hdae/fetch-cache` v0.1.0 (push + GitHub
+  Release), then push sbv2-web (CI resolves the jsr dep) and cut v0.2.0.
+  After publish: switch examples/browser to the pnpm jsr dep (vite TODO), and
+  re-add local `links` only while co-developing.
+- Deferred: assist_text (BERT-space emotion reference — needs a second DeBERTa
+  pass); pitch/intonation post-processing (needs a WORLD port, quality loss);
+  browser offline int64→int32 conversion (validation spike first).
+- `public/dict/naist-jdic.jtd` stays gitignored-but-tracked until the init
+  squash.
 
 ## Anchors
 
 - Model I/O contract: [../docs/aivmx-interface.md](../docs/aivmx-interface.md).
 - Layer split: [../docs/decisions/0001-frontend-synth-responsibility-split.md](../docs/decisions/0001-frontend-synth-responsibility-split.md).
 - Backend split: [../docs/decisions/0002-runtime-agnostic-core-injected-backends.md](../docs/decisions/0002-runtime-agnostic-core-injected-backends.md).
+- SynthInput contract: [../docs/decisions/0003-synthinput-public-contract.md](../docs/decisions/0003-synthinput-public-contract.md).
+- release lifecycle: [../docs/decisions/0004-release-lifecycle-contract.md](../docs/decisions/0004-release-lifecycle-contract.md).
+- Migration: [../docs/migration-0.2.md](../docs/migration-0.2.md).

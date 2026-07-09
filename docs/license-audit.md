@@ -14,8 +14,9 @@ tools, or generated HuggingFace packages.
 
 No GPL, LGPL, or AGPL dependency is imported by the published TypeScript
 entrypoints (`.` and `./node`). The runtime dependencies are @hdae/yomi (MIT),
-onnxruntime-web for `.`, onnxruntime-node for `./node`, and onnxruntime-common
-as the shared type layer (all ONNX Runtime packages are MIT).
+@hdae/fetch-cache (MIT), onnxruntime-web for `.`, onnxruntime-node for `./node`,
+and onnxruntime-common as the shared type layer (all ONNX Runtime packages are
+MIT).
 
 ## SYMBOLS Table
 

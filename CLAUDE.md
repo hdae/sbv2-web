@@ -31,7 +31,8 @@ and assistants; it takes precedence over any global conventions.
 - `deno task check` — fmt (check) + lint + `deno check` + test. Clear before
   moving on.
 - `deno task cli -- --aivmx path --device cpu|dml|cuda|webgpu` —
-  onnxruntime-node synthesis CLI. `--text` で単発、省略で REPL。
+  onnxruntime-node synthesis CLI. `--text` で単発、省略で REPL。DeBERTa・辞書は
+  既定で HuggingFace 自動取得（`--deberta`+`--tokenizer` / `--dict` で上書き）。
 - `deno task check:node` — type-checks the node backend (kept out of the default
   check to avoid downloading the native package in CI).
 - `deno task bench:smoke` / `deno task bench:matrix` — benchmark harness.
@@ -45,7 +46,11 @@ The text frontend (`@hdae/yomi`) is model-agnostic and zero-dependency: it emits
 `given_phone` / `given_tone` and word alignment only. All SBV2 JP-Extra
 specifics (symbol table, tone +6, `add_blank`, BERT tiling, style vector, ONNX
 I/O) are confined to the `Sbv2Adapter` core (driven by an injected ORT backend).
-`synthesizeText` is the glue that assembles the model-agnostic `SynthInput`. See
+`synthesizeText` is the glue that assembles the model-agnostic `SynthInput`
+(`SynthInput` is a public contract — ADR-0003; `release()` lifecycle —
+ADR-0004). Asset acquisition: `getDeberta()` (`src/assets/deberta.ts`) fetches
+the quantized DeBERTa + tokenizer set from HuggingFace, SHA-pinned and verified,
+via `@hdae/fetch-cache`; the dictionary comes from yomi's `getDictionary()`. See
 [ADR-0001](docs/decisions/0001-frontend-synth-responsibility-split.md).
 
 ## Docs (what goes where)
@@ -59,6 +64,8 @@ I/O) are confined to the `Sbv2Adapter` core (driven by an injected ORT backend).
 - [docs/benchmark.md](docs/benchmark.md) — quantization/perf matrix.
 - [docs/license-audit.md](docs/license-audit.md) — package vs model/dict
   licensing.
+- [docs/migration-0.2.md](docs/migration-0.2.md) — 0.1.0 → 0.2.0 API migration
+  guide.
 - [.claude/ACTIVE_DESIGN.md](.claude/ACTIVE_DESIGN.md) — current design focus
   and a pitfalls index. Read it before reviewing or planning.
 

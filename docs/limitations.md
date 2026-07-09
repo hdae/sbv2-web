@@ -5,10 +5,14 @@
 This package does not bundle model files. Faithful AivisSpeech /
 Style-Bert-VITS2 JP-Extra inference needs:
 
-- an acoustic AIVMX or ONNX model;
-- a DeBERTa ONNX model for Japanese BERT features;
-- tokenizer assets for the DeBERTa model;
-- a JTD dictionary for `@hdae/yomi`.
+- an acoustic AIVMX or ONNX model (user-supplied);
+- a DeBERTa ONNX model + tokenizer assets — fetched from HuggingFace by
+  `getDeberta()` by default (SHA-pinned, verified, Cache-API cached);
+- a JTD dictionary for `@hdae/yomi` — fetched by yomi's `getDictionary()` by
+  default.
+
+Auto-fetch requires network on first use and a Cache API for offline reuse
+(browsers and Deno have one; Node.js falls back to fetch-only).
 
 Model licenses are separate from this package. AIVMX models may use ACML terms,
 and DeBERTa derivatives inherit CC BY-SA 4.0 obligations from the original model

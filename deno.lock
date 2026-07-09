@@ -193,11 +193,19 @@
   },
   "workspace": {
     "dependencies": [
+      "jsr:@hdae/fetch-cache@0.1",
       "jsr:@hdae/yomi@0.2",
       "jsr:@std/assert@1",
       "npm:onnxruntime-common@1.27.0",
       "npm:onnxruntime-node@1.27.0",
       "npm:onnxruntime-web@1.27.0"
-    ]
+    ],
+    "links": {
+      "jsr:@hdae/fetch-cache@0.1.0": {
+        "dependencies": [
+          "jsr:@std/assert@1"
+        ]
+      }
+    }
   }
 }
