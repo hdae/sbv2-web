@@ -18,6 +18,15 @@ export {
   SYMBOLS,
 } from "./text/symbols.ts";
 export { type Sbv2PhoneTone, toSbv2PhoneTone } from "./text/phone_tone.ts";
+export {
+  buildDebertaTokenizer,
+  DEBERTA_REPO,
+  DEBERTA_REVISION,
+  type DebertaAssets,
+  type DebertaProgress,
+  getDeberta,
+  type GetDebertaOptions,
+} from "./assets/deberta.ts";
 export { type Npy2dFloat32, parseNpy2dFloat32 } from "./runtime/npy.ts";
 export {
   type AivmxMetadata,
