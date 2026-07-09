@@ -226,3 +226,24 @@ Deno.test("styleVector: styleId 範囲外は throw", () => {
     "範囲外",
   );
 });
+
+Deno.test("styleVector: 非整数 styleId は throw（行跨ぎ・NaN ベクトルの穴を塞ぐ）", () => {
+  const data = new Float32Array(5 * 256);
+  // 行内に収まる非整数（1.5 → rowBase=384 で行 1/2 を跨ぐ読み出しになる）。
+  assertThrows(
+    () => styleVector({ rows: 5, cols: 256, data }, 1.5, 1.0),
+    Error,
+    "整数",
+  );
+  // 範囲末尾の非整数（4.5 → data 長超え undefined→NaN になる）。
+  assertThrows(
+    () => styleVector({ rows: 5, cols: 256, data }, 4.5, 1.0),
+    Error,
+    "整数",
+  );
+  assertThrows(
+    () => styleVector({ rows: 5, cols: 256, data }, Number.NaN, 1.0),
+    Error,
+    "整数",
+  );
+});

@@ -156,9 +156,13 @@ export const styleVector = (
   if (cols !== 256) {
     throw new Error(`styleVector: style 行列の列数が 256 でない: ${cols}`);
   }
-  if (!(styleId >= 0 && styleId < rows)) {
+  // 整数性も検査する。非整数は範囲チェックだけだと素通りし、行を跨いだ読み出し
+  // （styleId=1.5 → rowBase=384）や範囲外 undefined→NaN ベクトル（styleId=4.5, rows=5）を
+  // 黙って作る。リファレンス numpy の style_matrix[style_id] は非整数 index で必ず
+  // IndexError なので、throw がパリティ。
+  if (!(Number.isInteger(styleId) && styleId >= 0 && styleId < rows)) {
     throw new Error(
-      `styleVector: styleId ${styleId} が範囲外（スタイル数 ${rows}）`,
+      `styleVector: styleId ${styleId} が範囲外（0..${rows - 1} の整数を期待）`,
     );
   }
   // 列ごとの平均。
