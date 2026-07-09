@@ -44,5 +44,10 @@
       "src/**/*.test.ts",
       "src/testing/**"
     ]
+  },
+  "minimumDependencyAge":{
+    "exclude": [
+      "jsr:@hdae/yomi"
+    ]
   }
 }
