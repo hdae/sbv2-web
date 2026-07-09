@@ -19,7 +19,8 @@ import {
 import { toSbv2PhoneTone } from "../text/phone_tone.ts";
 import type { DebertaTokenizer } from "../text/deberta_tokenizer.ts";
 import { buildBaseWord2ph } from "../text/word2ph.ts";
-import type { ModelAdapter } from "./adapter_types.ts";
+import type { ModelAdapter, SynthScalars } from "./adapter_types.ts";
+import { padSilence } from "./silence.ts";
 
 /** synthesizeText の任意パラメータ（既定は synth_aivmx.py / SynthInput の既定に揃える）。 */
 export type SynthesizeOptions = {
@@ -29,6 +30,12 @@ export type SynthesizeOptions = {
   styleWeight?: number;
   /** 話者 local_id（sid, 既定 0）。 */
   speakerId?: number;
+  /** このリクエストだけのスカラー上書き（話速 lengthScale 等。省略キーはアダプタ既定）。 */
+  scalars?: Partial<SynthScalars>;
+  /** 文頭の無音秒数（波形先頭へのゼロ詰め。AivisSpeech の prePhonemeLength 相当）。 */
+  preSilenceSec?: number;
+  /** 文末の無音秒数（波形末尾へのゼロ詰め。AivisSpeech の postPhonemeLength 相当）。 */
+  postSilenceSec?: number;
   /** 修正辞書オーバーレイ（任意。フロントエンド解析に渡す）。 */
   overlay?: OverlayDictionary;
 };
@@ -66,7 +73,7 @@ export const synthesizeText = async (
   const bertText = words.map((w) => w.surface).join("");
   const baseWord2ph = buildBaseWord2ph(words, tokenizer, phones.length);
 
-  return await adapter.synthesize({
+  const wave = await adapter.synthesize({
     phones,
     tones,
     bertText,
@@ -74,5 +81,11 @@ export const synthesizeText = async (
     styleId: opts.styleId ?? 0,
     styleWeight: opts.styleWeight ?? 1.0,
     speakerId: opts.speakerId ?? 0,
+    scalars: opts.scalars,
+  });
+  // 文頭・文末の無音はモデル外の後処理（両方 0 ならコピーなしの素通し）。
+  return padSilence(wave, adapter.sampleRate, {
+    preSec: opts.preSilenceSec,
+    postSec: opts.postSilenceSec,
   });
 };

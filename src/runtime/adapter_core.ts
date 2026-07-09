@@ -10,7 +10,11 @@
 
 import type { InferenceSession, Tensor } from "onnxruntime-common";
 import type { DebertaTokenizer } from "../text/deberta_tokenizer.ts";
-import { getSamplingRate, readAivmxMetadata } from "./aivmx_meta.ts";
+import {
+  type AivmxMetadata,
+  readAivmxMetadata,
+  type Sbv2HyperParameters,
+} from "./aivmx_meta.ts";
 import {
   addBlankWord2ph,
   BERT_DIM,
@@ -22,6 +26,7 @@ import {
 import {
   type AcousticFeeds,
   DEFAULT_SCALARS,
+  mergeScalars,
   type ModelAdapter,
   OUTPUT_NAME,
   type SynthInput,
@@ -61,6 +66,21 @@ export class Sbv2Adapter implements ModelAdapter {
     return this.#styleMatrix.rows;
   }
 
+  /** aivmx 由来の hyper_parameters（プレーン ONNX で未指定なら undefined）。 */
+  get hyperParameters(): Sbv2HyperParameters | undefined {
+    return this.#hyperParameters;
+  }
+
+  /** 話者数（hyper_parameters の data.n_speakers。無ければ undefined）。 */
+  get numSpeakers(): number | undefined {
+    return this.#hyperParameters?.nSpeakers;
+  }
+
+  /** 話者名 → speakerId（sid）のマップ（hyper_parameters の data.spk2id）。 */
+  get spk2id(): Readonly<Record<string, number>> | undefined {
+    return this.#hyperParameters?.spk2id;
+  }
+
   readonly #backend: OrtBackend;
   readonly #acoustic: InferenceSession;
   readonly #acousticInputNames: readonly string[];
@@ -69,6 +89,11 @@ export class Sbv2Adapter implements ModelAdapter {
   readonly #tokenizer: DebertaTokenizer;
   readonly #styleMatrix: StyleMatrix;
   readonly #scalars: SynthScalars;
+  readonly #hyperParameters?: Sbv2HyperParameters;
+  /** release() が始まったら non-null（冪等化 + 以後の合成を fail loud で拒否）。 */
+  #releasePromise: Promise<void> | null = null;
+  /** in-flight の合成。release はこれらの完了を待ってからセッションを解放する。 */
+  readonly #inflight = new Set<Promise<unknown>>();
 
   private constructor(args: {
     backend: OrtBackend;
@@ -78,6 +103,7 @@ export class Sbv2Adapter implements ModelAdapter {
     styleMatrix: StyleMatrix;
     sampleRate: number;
     scalars: SynthScalars;
+    hyperParameters?: Sbv2HyperParameters;
   }) {
     this.#backend = args.backend;
     this.#acoustic = args.acoustic;
@@ -88,16 +114,22 @@ export class Sbv2Adapter implements ModelAdapter {
     this.#styleMatrix = args.styleMatrix;
     this.sampleRate = args.sampleRate;
     this.#scalars = args.scalars;
+    this.#hyperParameters = args.hyperParameters;
   }
 
-  /** Build from a plain acoustic ONNX file plus separate style vectors. */
+  /**
+   * Build from a plain acoustic ONNX file plus separate style vectors.
+   * sampleRate は必須（黙って 44100 に落とすと別レートのモデルで音程の狂った音声が
+   * 無言で出る）。hyperParameters は任意で、渡すと numSpeakers/spk2id 等のアクセサが生きる。
+   */
   static async fromOnnx(backend: OrtBackend, args: {
     acousticOnnxBytes: Uint8Array;
     bertOnnxBytes: Uint8Array;
     tokenizer: DebertaTokenizer;
     styleVectorsNpy: Uint8Array;
-    sampleRate?: number;
+    sampleRate: number;
     scalars?: SynthScalars;
+    hyperParameters?: Sbv2HyperParameters;
     sessionOptions?: OrtSessionOptions;
   }): Promise<Sbv2Adapter> {
     // 純検証を先に済ませる（ここで落ちればセッション未生成のまま fail loud できる）。
@@ -125,28 +157,44 @@ export class Sbv2Adapter implements ModelAdapter {
       bert,
       tokenizer: args.tokenizer,
       styleMatrix,
-      sampleRate: args.sampleRate ?? 44100,
-      scalars: args.scalars ?? DEFAULT_SCALARS,
+      sampleRate: args.sampleRate,
+      // mergeScalars で既定値へ重ねつつ非有限値を弾く（コンストラクタ時点で検証済みにする）。
+      scalars: mergeScalars(DEFAULT_SCALARS, args.scalars),
+      hyperParameters: args.hyperParameters,
     });
   }
 
-  /** Build from an AIVMX file. Style vectors and sample rate come from ONNX metadata. */
+  /**
+   * Build from an AIVMX file. Style vectors and sample rate come from ONNX metadata.
+   * metadata に readAivmxMetadata 済みの値を渡すと巨大 protobuf の再走査を省ける
+   * （レジストリ等で一度パースしている場合の最適化）。
+   */
   static async fromAivmx(backend: OrtBackend, args: {
     aivmxBytes: Uint8Array;
     bertOnnxBytes: Uint8Array;
     tokenizer: DebertaTokenizer;
+    metadata?: AivmxMetadata;
     sampleRate?: number;
     scalars?: SynthScalars;
     sessionOptions?: OrtSessionOptions;
   }): Promise<Sbv2Adapter> {
-    const metadata = readAivmxMetadata(args.aivmxBytes);
+    const metadata = args.metadata ?? readAivmxMetadata(args.aivmxBytes);
+    const sampleRate = args.sampleRate ??
+      metadata.hyperParameters?.samplingRate;
+    if (sampleRate === undefined) {
+      throw new Error(
+        "Sbv2Adapter: sampleRate を決められない（aivmx に aivm_hyper_parameters が無い。" +
+          "sampleRate を明示指定するか、hyper_parameters 入りの aivmx を使う）",
+      );
+    }
     return await Sbv2Adapter.fromOnnx(backend, {
       acousticOnnxBytes: args.aivmxBytes,
       bertOnnxBytes: args.bertOnnxBytes,
       tokenizer: args.tokenizer,
       styleVectorsNpy: metadata.styleVectorsNpy,
-      sampleRate: args.sampleRate ?? getSamplingRate(metadata.hyperParameters),
+      sampleRate,
       scalars: args.scalars,
+      hyperParameters: metadata.hyperParameters,
       sessionOptions: args.sessionOptions,
     });
   }
@@ -208,8 +256,30 @@ export class Sbv2Adapter implements ModelAdapter {
     return data;
   }
 
+  /** release 済みなら throw（fail loud）。合成系公開メソッドの入口で呼ぶ。 */
+  #assertLive(method: string): void {
+    if (this.#releasePromise !== null) {
+      throw new Error(`Sbv2Adapter: release() 後に ${method} が呼ばれた`);
+    }
+  }
+
+  /** promise を in-flight として追跡する（release はこれらの完了を待つ）。 */
+  async #track<T>(promise: Promise<T>): Promise<T> {
+    this.#inflight.add(promise);
+    try {
+      return await promise;
+    } finally {
+      this.#inflight.delete(promise);
+    }
+  }
+
   /** 入力テンソル束を組み立てる（run 前。パリティ検証で再利用できるよう分離）。 */
-  async buildAcousticFeeds(input: SynthInput): Promise<AcousticFeeds> {
+  buildAcousticFeeds(input: SynthInput): Promise<AcousticFeeds> {
+    this.#assertLive("buildAcousticFeeds");
+    return this.#track(this.#buildAcousticFeeds(input));
+  }
+
+  async #buildAcousticFeeds(input: SynthInput): Promise<AcousticFeeds> {
     const { phoneIds, toneIds, languageIds } = phonesTonesToModelIds(
       input.phones,
       input.tones,
@@ -236,12 +306,18 @@ export class Sbv2Adapter implements ModelAdapter {
       bert,
       styleVec,
       seqLen,
-      scalars: this.#scalars,
+      // per-call の部分上書きをアダプタ既定へ重ねる（非有限値はここで throw）。
+      scalars: mergeScalars(this.#scalars, input.scalars),
     };
   }
 
-  async synthesize(input: SynthInput): Promise<Float32Array> {
-    const feeds = await this.buildAcousticFeeds(input);
+  synthesize(input: SynthInput): Promise<Float32Array> {
+    this.#assertLive("synthesize");
+    return this.#track(this.#synthesize(input));
+  }
+
+  async #synthesize(input: SynthInput): Promise<Float32Array> {
+    const feeds = await this.#buildAcousticFeeds(input);
     const T = feeds.seqLen;
     // グラフの入力名で名前束縛（決め打ち禁止, aivmx-interface.md §2.1）。
     const tensors: Record<string, Tensor> = {
@@ -290,9 +366,34 @@ export class Sbv2Adapter implements ModelAdapter {
     return wave.data as Float32Array;
   }
 
-  /** セッションを解放する（大きなモデル 2 本を保持するため明示 release 用）。 */
-  async release(): Promise<void> {
-    await this.#acoustic.release();
-    await this.#bert.release();
+  /**
+   * セッションを解放する（大きなモデル 2 本を保持するため明示 release 用）。
+   *
+   * 契約（docs/decisions/0004）:
+   * - 冪等: 2 回目以降は同じ完了を返す。
+   * - in-flight の synthesize / buildAcousticFeeds の完了を待ってから解放する
+   *   （推論中のネイティブセッションを引き抜かない）。
+   * - release 開始後の synthesize / buildAcousticFeeds は throw（fail loud）。
+   */
+  release(): Promise<void> {
+    this.#releasePromise ??= this.#release();
+    return this.#releasePromise;
+  }
+
+  async #release(): Promise<void> {
+    // 単一スレッドの JS では、#releasePromise 代入以降の新規合成は #assertLive で
+    // 同期的に拒否される。よってここで見える #inflight が全てで、待てば枯れる。
+    while (this.#inflight.size > 0) {
+      await Promise.allSettled([...this.#inflight]);
+    }
+    // 片方が失敗しても両方の解放を試み、失敗は握りつぶさず投げ直す。
+    const results = await Promise.allSettled([
+      this.#acoustic.release(),
+      this.#bert.release(),
+    ]);
+    const failure = results.find(
+      (result): result is PromiseRejectedResult => result.status === "rejected",
+    );
+    if (failure !== undefined) throw failure.reason;
   }
 }

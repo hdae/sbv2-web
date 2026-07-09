@@ -11,6 +11,10 @@ import {
   Sbv2Adapter,
 } from "../runtime/adapter_core.ts";
 import type { SynthScalars } from "../runtime/adapter_types.ts";
+import type {
+  AivmxMetadata,
+  Sbv2HyperParameters,
+} from "../runtime/aivmx_meta.ts";
 
 const backend: OrtBackend = {
   int64: (data, dims) => new ort.Tensor("int64", data, dims),
@@ -29,6 +33,8 @@ export class Sbv2ModelAdapter {
     aivmxBytes: Uint8Array;
     bertOnnxBytes: Uint8Array;
     tokenizer: DebertaTokenizer;
+    /** readAivmxMetadata 済みの値（巨大 protobuf の再走査を省く）。 */
+    metadata?: AivmxMetadata;
     sampleRate?: number;
     scalars?: SynthScalars;
     sessionOptions?: OrtSessionOptions;
@@ -42,8 +48,10 @@ export class Sbv2ModelAdapter {
     bertOnnxBytes: Uint8Array;
     tokenizer: DebertaTokenizer;
     styleVectorsNpy: Uint8Array;
-    sampleRate?: number;
+    /** 必須（AIVM メタが無いので出力レートを黙って仮定しない）。 */
+    sampleRate: number;
     scalars?: SynthScalars;
+    hyperParameters?: Sbv2HyperParameters;
     sessionOptions?: OrtSessionOptions;
   }): Promise<Sbv2Adapter> {
     return Sbv2Adapter.fromOnnx(backend, args);

@@ -14,6 +14,14 @@
 //   field 14 = metadata_props (repeated StringStringEntryProto)
 //     StringStringEntryProto: field 1 = key (string), field 2 = value (string)
 
+import {
+  expectFiniteNumber,
+  expectRecord,
+  optFiniteNumber,
+  optNumberRecord,
+  optString,
+} from "./json_expect.ts";
+
 /** protobuf の varint を読む。@returns [値, 次オフセット]。 */
 const readVarint = (buf: Uint8Array, offset: number): [number, number] => {
   let shift = 0;
@@ -60,47 +68,92 @@ export const extractStyleVectorsNpy = (onnxBytes: Uint8Array): Uint8Array => {
   return base64ToBytes(base64);
 };
 
+/**
+ * SBV2 の hyper_parameters（config.json 相当, aivmlib StyleBertVITS2HyperParameters）の
+ * 型付きサブセット。推論・話者/スタイル選択に要るフィールドだけを型付けし、
+ * それ以外は raw から読む。
+ */
+export type Sbv2HyperParameters = {
+  /** ルートの model_name。 */
+  modelName?: string;
+  /** SBV2 バージョン文字列（例 "2.7.0-JP-Extra"）。 */
+  version?: string;
+  /** data.sampling_rate（Hz）。SBV2 hparams の必須値（欠落・不正は throw）。 */
+  samplingRate: number;
+  /** data.n_speakers。 */
+  nSpeakers?: number;
+  /** 話者名 → speaker local_id（sid テンソルに入れる値の真実源）。 */
+  spk2id?: Readonly<Record<string, number>>;
+  /** data.num_styles（style_vectors の行数と一致するはず）。 */
+  numStyles?: number;
+  /** スタイル名 → style local_id。 */
+  style2id?: Readonly<Record<string, number>>;
+  /** 生の hyper_parameters JSON（型付け外のフィールドはここから読む）。 */
+  raw: unknown;
+};
+
+/**
+ * hyper_parameters の unknown JSON を型付きサブセットへ検証する（fail loud）。
+ * sampling_rate は波形出力の正しさに直結する（黙って既定値に落とすと別レートの
+ * モデルで音程が狂った音声が無言で出る）ため、欠落・不正は throw する。
+ */
+export const readSbv2HyperParameters = (json: unknown): Sbv2HyperParameters => {
+  const root = expectRecord(json, "hyper_parameters");
+  const data = expectRecord(root.data, "hyper_parameters.data");
+  return {
+    modelName: optString(root.model_name, "hyper_parameters.model_name"),
+    version: optString(root.version, "hyper_parameters.version"),
+    samplingRate: expectFiniteNumber(
+      data.sampling_rate,
+      "hyper_parameters.data.sampling_rate",
+    ),
+    nSpeakers: optFiniteNumber(
+      data.n_speakers,
+      "hyper_parameters.data.n_speakers",
+    ),
+    spk2id: optNumberRecord(data.spk2id, "hyper_parameters.data.spk2id"),
+    numStyles: optFiniteNumber(
+      data.num_styles,
+      "hyper_parameters.data.num_styles",
+    ),
+    style2id: optNumberRecord(data.style2id, "hyper_parameters.data.style2id"),
+    raw: json,
+  };
+};
+
 export type AivmxMetadata = {
-  manifest?: unknown;
-  hyperParameters?: unknown;
+  /** aivm_hyper_parameters（キー自体が無い aivmx では undefined）。 */
+  hyperParameters?: Sbv2HyperParameters;
   styleVectorsNpy: Uint8Array;
 };
 
-const parseJsonMetadata = (
-  onnxBytes: Uint8Array,
-  key: string,
-): unknown | undefined => {
-  const value = extractMetadataValue(onnxBytes, key);
-  if (value === undefined) return undefined;
+/**
+ * aivmx から推論に必要なメタデータを取り出す。
+ * NOTE: aivm_manifest（実物で数 MB。base64 アイコン/ボイスサンプルが支配的）は
+ * ここでは読まない — 話者カタログ等が要るときだけ readAivmxManifest を使う。
+ */
+export const readAivmxMetadata = (onnxBytes: Uint8Array): AivmxMetadata => {
+  const hparamsText = extractMetadataValue(onnxBytes, "aivm_hyper_parameters");
+  return {
+    hyperParameters: hparamsText === undefined
+      ? undefined
+      : readSbv2HyperParameters(
+        parseMetadataJson(hparamsText, "aivm_hyper_parameters"),
+      ),
+    styleVectorsNpy: extractStyleVectorsNpy(onnxBytes),
+  };
+};
+
+/** metadata_props の JSON 文字列をパースする（壊れた JSON は key 名付きで throw）。 */
+export const parseMetadataJson = (text: string, key: string): unknown => {
   try {
-    return JSON.parse(value) as unknown;
+    return JSON.parse(text) as unknown;
   } catch (cause) {
     throw new Error(
       `aivmx_meta: metadata_props の '${key}' が JSON として読めない`,
       { cause },
     );
   }
-};
-
-export const readAivmxMetadata = (onnxBytes: Uint8Array): AivmxMetadata => ({
-  manifest: parseJsonMetadata(onnxBytes, "aivm_manifest"),
-  hyperParameters: parseJsonMetadata(onnxBytes, "aivm_hyper_parameters"),
-  styleVectorsNpy: extractStyleVectorsNpy(onnxBytes),
-});
-
-export const getSamplingRate = (
-  hyperParameters: unknown,
-  fallback = 44100,
-): number => {
-  const data = hyperParameters !== null && typeof hyperParameters === "object"
-    ? (hyperParameters as { data?: unknown }).data
-    : undefined;
-  const samplingRate = data !== null && typeof data === "object"
-    ? (data as { sampling_rate?: unknown }).sampling_rate
-    : undefined;
-  return typeof samplingRate === "number" && Number.isFinite(samplingRate)
-    ? samplingRate
-    : fallback;
 };
 
 /**

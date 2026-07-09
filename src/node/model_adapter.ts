@@ -19,6 +19,10 @@ import {
   Sbv2Adapter,
 } from "../runtime/adapter_core.ts";
 import type { SynthScalars } from "../runtime/adapter_types.ts";
+import type {
+  AivmxMetadata,
+  Sbv2HyperParameters,
+} from "../runtime/aivmx_meta.ts";
 
 /**
  * onnxruntime-node の実行プロバイダ（デバイス）。
@@ -67,6 +71,8 @@ export class Sbv2NodeModelAdapter {
     aivmxBytes: Uint8Array;
     bertOnnxBytes: Uint8Array;
     tokenizer: DebertaTokenizer;
+    /** readAivmxMetadata 済みの値（巨大 protobuf の再走査を省く）。 */
+    metadata?: AivmxMetadata;
     device?: NodeDevice;
     sampleRate?: number;
     scalars?: SynthScalars;
@@ -85,8 +91,10 @@ export class Sbv2NodeModelAdapter {
     tokenizer: DebertaTokenizer;
     styleVectorsNpy: Uint8Array;
     device?: NodeDevice;
-    sampleRate?: number;
+    /** 必須（AIVM メタが無いので出力レートを黙って仮定しない）。 */
+    sampleRate: number;
     scalars?: SynthScalars;
+    hyperParameters?: Sbv2HyperParameters;
     sessionOptions?: OrtSessionOptions;
   }): Promise<Sbv2Adapter> {
     return Sbv2Adapter.fromOnnx(backend, {

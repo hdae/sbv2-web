@@ -24,9 +24,19 @@ export {
   base64ToBytes,
   extractMetadataValue,
   extractStyleVectorsNpy,
-  getSamplingRate,
   readAivmxMetadata,
+  readSbv2HyperParameters,
+  type Sbv2HyperParameters,
 } from "./runtime/aivmx_meta.ts";
+export {
+  type AivmManifest,
+  type AivmSpeaker,
+  type AivmStyle,
+  type AivmVoiceSample,
+  parseAivmManifest,
+  readAivmxManifest,
+  type ReadAivmxManifestOptions,
+} from "./runtime/aivm_manifest.ts";
 export {
   addBlankWord2ph,
   BERT_DIM,
@@ -40,10 +50,13 @@ export {
 export {
   type AcousticFeeds,
   DEFAULT_SCALARS,
+  mergeScalars,
   type ModelAdapter,
   type SynthInput,
   type SynthScalars,
 } from "./runtime/adapter_types.ts";
+export { validateSynthInput } from "./runtime/validate_input.ts";
+export { concatWithSilence, padSilence } from "./runtime/silence.ts";
 export {
   type OrtBackend,
   type OrtSessionOptions,

@@ -165,6 +165,10 @@ export const styleVector = (
       `styleVector: styleId ${styleId} が範囲外（0..${rows - 1} の整数を期待）`,
     );
   }
+  // weight の NaN/±Infinity はベクトル全体を無言で汚染する（styleId と同じ穴の類型）。
+  if (!Number.isFinite(weight)) {
+    throw new Error(`styleVector: weight が有限数でない: ${weight}`);
+  }
   // 列ごとの平均。
   const mean = new Float32Array(cols);
   for (let r = 0; r < rows; r++) {

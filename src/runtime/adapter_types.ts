@@ -30,6 +30,12 @@ export type SynthInput = {
   styleWeight: number;
   /** 話者 local_id（sid, 既定 0）。 */
   speakerId: number;
+  /**
+   * このリクエストだけのスカラー上書き（部分指定可。省略キーはアダプタ既定）。
+   * 話速（lengthScale）やゆらぎ（sdpRatio 等）をリクエスト毎に変える用途。
+   * 非有限値は throw（NaN が無言でグラフに流れるのを防ぐ）。
+   */
+  scalars?: Partial<SynthScalars>;
 };
 
 /** モデルアダプタのスカラーパラメータ（synth_aivmx.py の既定を踏襲）。 */
@@ -46,6 +52,23 @@ export const DEFAULT_SCALARS: SynthScalars = {
   sdpRatio: 0.2,
   noiseScale: 0.6,
   noiseScaleW: 0.8,
+};
+
+/**
+ * ベーススカラーに部分上書きを重ねて検証する（per-call scalars の合成点）。
+ * 非有限値（NaN/±Infinity）はグラフ入力に流れると壊れた音声を無言で生むので throw。
+ */
+export const mergeScalars = (
+  base: SynthScalars,
+  override?: Partial<SynthScalars>,
+): SynthScalars => {
+  const merged = { ...base, ...override };
+  for (const [key, value] of Object.entries(merged)) {
+    if (!Number.isFinite(value)) {
+      throw new Error(`mergeScalars: ${key} が有限数でない: ${value}`);
+    }
+  }
+  return merged;
 };
 
 /** モデルアダプタ共通インターフェース（aivmx-interface.md §6.2）。 */

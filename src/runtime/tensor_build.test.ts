@@ -247,3 +247,12 @@ Deno.test("styleVector: 非整数 styleId は throw（行跨ぎ・NaN ベクト�
     "整数",
   );
 });
+
+Deno.test("styleVector: 非有限 weight は throw（NaN ベクトル汚染の防止）", () => {
+  const data = new Float32Array(2 * 256);
+  assertThrows(
+    () => styleVector({ rows: 2, cols: 256, data }, 0, Number.NaN),
+    Error,
+    "weight",
+  );
+});

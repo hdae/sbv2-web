@@ -28,10 +28,10 @@ export class MockSession {
 
   constructor(
     readonly inputNames: readonly string[] = [],
-    /** run の出力を作る（省略時は reject）。 */
+    /** run の出力を作る（省略時は reject。Promise を返せば in-flight を保留できる）。 */
     readonly runImpl?: (
       feeds: Record<string, Tensor>,
-    ) => Record<string, unknown>,
+    ) => Record<string, unknown> | Promise<Record<string, unknown>>,
   ) {}
 
   run(feeds: Record<string, Tensor>): Promise<Record<string, unknown>> {

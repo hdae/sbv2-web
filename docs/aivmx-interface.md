@@ -82,3 +82,24 @@ parameters, and ONNX input/output wiring — are confined to `Sbv2ModelAdapter`.
 The text→audio glue (`synthesizeText`) lives on the synth side and only
 assembles the model-agnostic `SynthInput`. See
 [ADR-0001](decisions/0001-frontend-synth-responsibility-split.md).
+
+### 6.3 SynthInput as a Public Contract
+
+`SynthInput` is a stable public contract so consumers (e.g. a VOICEVOX-style
+server synthesizing from user-edited accent phrases) can build the
+`given_phone` / `given_tone` path themselves
+([ADR-0003](decisions/0003-synthinput-public-contract.md)). Invariants:
+
+- `phones` — SBV2 symbols including both `_` pads and punctuation, pre
+  `add_blank`; `tones` — same length, values 0/1 (pre +6).
+- `baseWord2ph` — both-end sentinels are `1`, every entry a positive integer,
+  `sum(baseWord2ph) === phones.length`, and
+  `baseWord2ph.length === tokenize(bertText).length + 2` (DeBERTa char tokens).
+- `scalars` — optional per-call partial override merged over the adapter
+  defaults; non-finite values throw.
+
+`validateSynthInput(input, tokenizer?)` checks all of the above up front (the
+DeBERTa-token check only when a tokenizer is passed); the adapter re-checks the
+deep invariants during synthesis regardless. `release()` follows
+[ADR-0004](decisions/0004-release-lifecycle-contract.md): idempotent, waits for
+in-flight synthesis, and rejects further calls loudly.
