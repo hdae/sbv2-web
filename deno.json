@@ -14,9 +14,6 @@
     "onnxruntime-web": "npm:onnxruntime-web@1.27.0",
     "onnxruntime-node": "npm:onnxruntime-node@1.27.0"
   },
-  "links": [
-    "../fetch-cache"
-  ],
   "tasks": {
     "check": "deno fmt --check .github CLAUDE.md README.md deno.json docs scripts src examples/cli tools/bench && deno lint src examples/cli tools/bench scripts && deno check src/mod.ts && deno test --allow-read",
     "check:node": "deno check src/node/mod.ts examples/cli/synthesize_node.ts",
