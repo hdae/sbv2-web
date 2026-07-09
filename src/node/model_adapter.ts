@@ -36,10 +36,26 @@ const backend: OrtBackend = {
     ort.InferenceSession.create(bytes, options),
 };
 
+/**
+ * device 指定を executionProviders へ変換する。呼び出し側が sessionOptions.executionProviders を
+ * 明示したときはそれを尊重する（EP 固有オプション、例: DirectML の deviceId を渡す唯一の経路）。
+ * device と executionProviders の同時指定は曖昧なので fail loud。
+ */
 const withDevice = (
-  device: NodeDevice,
+  device: NodeDevice | undefined,
   options?: OrtSessionOptions,
-): OrtSessionOptions => ({ ...options, executionProviders: [device] });
+): OrtSessionOptions => {
+  if (options?.executionProviders !== undefined) {
+    if (device !== undefined) {
+      throw new Error(
+        "Sbv2NodeModelAdapter: device と sessionOptions.executionProviders は同時指定できない" +
+          "（EP 固有オプションを渡すときは executionProviders のみを使う）",
+      );
+    }
+    return options;
+  }
+  return { ...options, executionProviders: [device ?? "cpu"] };
+};
 
 /**
  * SBV2 JP-Extra 用モデルアダプタ（onnxruntime-node）。web 版と同一のロジックを、EP を選べる形で
@@ -58,7 +74,7 @@ export class Sbv2NodeModelAdapter {
   }): Promise<Sbv2Adapter> {
     return Sbv2Adapter.fromAivmx(backend, {
       ...args,
-      sessionOptions: withDevice(args.device ?? "cpu", args.sessionOptions),
+      sessionOptions: withDevice(args.device, args.sessionOptions),
     });
   }
 
@@ -75,7 +91,7 @@ export class Sbv2NodeModelAdapter {
   }): Promise<Sbv2Adapter> {
     return Sbv2Adapter.fromOnnx(backend, {
       ...args,
-      sessionOptions: withDevice(args.device ?? "cpu", args.sessionOptions),
+      sessionOptions: withDevice(args.device, args.sessionOptions),
     });
   }
 }
