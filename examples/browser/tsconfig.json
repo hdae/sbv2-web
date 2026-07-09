@@ -19,6 +19,12 @@
       "@/*": [
         "./src/*"
       ],
+      "@hdae/fetch-cache": [
+        "../../../fetch-cache/src/mod.ts"
+      ],
+      "@hdae/fetch-cache/hf": [
+        "../../../fetch-cache/src/hf/mod.ts"
+      ],
       "@hdae/yomi": [
         "./node_modules/@hdae/yomi/_dist/src/mod.d.ts"
       ],

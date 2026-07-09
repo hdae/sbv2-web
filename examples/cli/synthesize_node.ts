@@ -4,21 +4,26 @@
 //   --text あり → 単発合成（--out へ書き出し）。
 //   --text なし → REPL（1行ごとに合成して --out-dir へ連番出力、:q / :quit / :exit で終了）。
 //
+// 既定では DeBERTa + トークナイザ（getDeberta）と辞書（yomi getDictionary）を
+// HuggingFace から自動取得する（Cache API に永続、2 回目以降はオフライン）。
+// ローカル資産を使うときだけ --deberta/--tokenizer（両方セット）や --dict を渡す。
+//
 // web(WASM/WebGPU) 経路はブラウザ版サンプル（examples/browser）で確認するため、CLI は node 一本。
 // GPU を試すには --device dml（Windows DirectML）/ --device cuda / --device webgpu を渡す。
 // CPU はどこでも動く。onnxruntime-node のネイティブ addon は libstdc++ を要求するため、
 // nix/devbox のような隔離環境では LD_LIBRARY_PATH に gcc の lib を通すこと。
 
 import {
-  type CleanRanges,
-  type DebertaSpecialTokens,
-  DebertaTokenizer,
+  buildDebertaTokenizer,
+  type DebertaTokenizer,
   encodeWav,
+  getDeberta,
   type NodeDevice,
   Sbv2NodeModelAdapter,
   synthesizeText,
 } from "../../src/node/mod.ts";
 import { JtdDictionary } from "@hdae/yomi";
+import { getDictionary } from "@hdae/yomi/browser";
 
 const parseArgs = () => {
   const args = new Map<string, string>();
@@ -41,25 +46,13 @@ const toArrayBuffer = (bytes: Uint8Array): ArrayBuffer =>
     bytes.byteOffset + bytes.byteLength,
   ) as ArrayBuffer;
 
-const readTokenizer = async (dir: string): Promise<DebertaTokenizer> => {
-  const vocabText = await Deno.readTextFile(dir + "/vocab.txt");
-  const clean = JSON.parse(
+/** ローカルのトークナイザ資産 3 点から構築する（自動取得と同じ buildDebertaTokenizer 経路）。 */
+const readTokenizer = async (dir: string): Promise<DebertaTokenizer> =>
+  buildDebertaTokenizer(
+    await Deno.readTextFile(dir + "/vocab.txt"),
     await Deno.readTextFile(dir + "/clean_ranges.json"),
-  ) as CleanRanges;
-  const meta = JSON.parse(await Deno.readTextFile(dir + "/meta.json")) as {
-    special_tokens: {
-      cls: { id: number };
-      sep: { id: number };
-      unk: { id: number };
-    };
-  };
-  const special: DebertaSpecialTokens = {
-    clsId: meta.special_tokens.cls.id,
-    sepId: meta.special_tokens.sep.id,
-    unkId: meta.special_tokens.unk.id,
-  };
-  return DebertaTokenizer.fromVocabText(vocabText, clean, special);
-};
+    await Deno.readTextFile(dir + "/meta.json"),
+  );
 
 const DEVICES: readonly NodeDevice[] = ["cpu", "dml", "cuda", "webgpu"];
 
@@ -68,7 +61,9 @@ const aivmxPath = args.get("aivmx");
 if (!aivmxPath) {
   console.error(
     "Usage: deno task cli -- --aivmx path/to/model.aivmx " +
-      "[--device cpu|dml|cuda|webgpu] [--deberta path] [--tokenizer dir] [--dict path] " +
+      "[--device cpu|dml|cuda|webgpu] " +
+      "[--deberta path --tokenizer dir (両方セット。省略で HuggingFace 自動取得)] " +
+      "[--dict path (省略で HuggingFace 自動取得)] " +
       "[--text text (省略で REPL)] [--out path] [--out-dir dir] " +
       "[--style-id 0] [--style-weight 1] [--speaker-id 0]",
   );
@@ -80,11 +75,9 @@ if (!DEVICES.includes(device)) {
   throw new Error("--device must be one of: " + DEVICES.join(", "));
 }
 
-const debertaPath = args.get("deberta") ??
-  "data/hf-packages/deberta-int4-rtn-b256/model.onnx";
-const tokenizerDir = args.get("tokenizer") ??
-  "data/hf-packages/deberta-int4-rtn-b256";
-const dictPath = args.get("dict") ?? "data/dict/naist-jdic.jtd";
+const debertaPath = args.get("deberta");
+const tokenizerDir = args.get("tokenizer");
+const dictPath = args.get("dict");
 const outPath = args.get("out") ?? "out/node/synth.wav";
 const outDir = args.get("out-dir") ?? "out/node/repl";
 const styleId = Number(args.get("style-id") ?? "0");
@@ -94,13 +87,42 @@ const speakerId = Number(args.get("speaker-id") ?? "0");
 console.error(
   `loading tokenizer, dictionary, and models (device=${device})...`,
 );
-const tokenizer = await readTokenizer(tokenizerDir);
-const dictBytes = await Deno.readFile(dictPath);
-const dict = JtdDictionary.load(toArrayBuffer(dictBytes), {
-  verifyChecksums: false,
-});
+
+// DeBERTa + トークナイザ: 両フラグ指定でローカル、両方省略で HF 自動取得。片方だけは曖昧なので拒否。
+let tokenizer: DebertaTokenizer;
+let bertOnnxBytes: Uint8Array;
+if (debertaPath !== undefined || tokenizerDir !== undefined) {
+  if (debertaPath === undefined || tokenizerDir === undefined) {
+    throw new Error(
+      "--deberta と --tokenizer は両方指定してください（両方省略で HuggingFace 自動取得）",
+    );
+  }
+  tokenizer = await readTokenizer(tokenizerDir);
+  bertOnnxBytes = await Deno.readFile(debertaPath);
+} else {
+  let lastPercent = -10;
+  const assets = await getDeberta({
+    onProgress: ({ path, loaded, total }) => {
+      if (path !== "model.onnx" || total === undefined) return;
+      const percent = Math.floor((loaded / total) * 100);
+      if (percent >= lastPercent + 10) {
+        lastPercent = percent;
+        console.error(`deberta: ${percent}% (${Math.round(loaded / 1e6)} MB)`);
+      }
+    },
+  });
+  tokenizer = assets.tokenizer;
+  bertOnnxBytes = assets.bertOnnxBytes;
+}
+
+// 辞書: --dict でローカル、省略で HF 自動取得（yomi getDictionary は Deno でも動く）。
+const dict = dictPath !== undefined
+  ? JtdDictionary.load(toArrayBuffer(await Deno.readFile(dictPath)), {
+    verifyChecksums: false,
+  })
+  : await getDictionary();
+
 const aivmxBytes = await Deno.readFile(aivmxPath);
-const bertOnnxBytes = await Deno.readFile(debertaPath);
 
 const createStarted = performance.now();
 const adapter = await Sbv2NodeModelAdapter.createFromAivmx({

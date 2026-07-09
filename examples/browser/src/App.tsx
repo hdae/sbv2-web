@@ -116,7 +116,7 @@ export default function App() {
         ? [
           ["AIVMX", fileLabel(files.aivmx)],
           ["DeBERTa", "auto (HuggingFace int4)"],
-          ["tokenizer", "bundled"],
+          ["tokenizer", "auto (HuggingFace)"],
           ["dictionary", "auto (HuggingFace)"],
         ]
         : [
@@ -290,7 +290,7 @@ export default function App() {
                 checked={useBundled}
                 onChange={(event) => setUseBundled(event.target.checked)}
               />
-              Auto-load DeBERTa + dictionary (HuggingFace) + bundled tokenizer
+              Auto-load DeBERTa + tokenizer + dictionary (HuggingFace)
               (recommended)
             </label>
             <div className="grid gap-4 md:grid-cols-2">
@@ -331,9 +331,9 @@ export default function App() {
             </div>
             {useBundled && (
               <p className="text-xs text-muted-foreground">
-                DeBERTa int4 (~240 MiB) downloads from HuggingFace on first load
-                and is cached for offline reuse. Tokenizer assets are bundled;
-                the dictionary is fetched from HuggingFace and cached too.
+                DeBERTa int4 (~240 MiB) + tokenizer assets download from
+                HuggingFace on first load (SHA-pinned, verified) and are cached
+                for offline reuse. The dictionary is fetched and cached too.
               </p>
             )}
           </div>

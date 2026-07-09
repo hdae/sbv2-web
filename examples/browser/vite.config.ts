@@ -12,6 +12,16 @@ export default defineConfig({
   },
   resolve: {
     alias: [
+      // TODO: @hdae/fetch-cache の JSR 公開後は pnpm 依存（jsr:）へ切り替え、
+      // node_modules 解決にする（現状は隣接リポのソース直指し）。
+      {
+        find: "@hdae/fetch-cache/hf",
+        replacement: resolve(__dirname, "../../../fetch-cache/src/hf/mod.ts"),
+      },
+      {
+        find: "@hdae/fetch-cache",
+        replacement: resolve(__dirname, "../../../fetch-cache/src/mod.ts"),
+      },
       {
         find: "@hdae/yomi/browser",
         replacement: resolve(
@@ -42,7 +52,7 @@ export default defineConfig({
   },
   server: {
     fs: {
-      allow: ["../.."],
+      allow: ["../..", "../../../fetch-cache"],
     },
   },
 });

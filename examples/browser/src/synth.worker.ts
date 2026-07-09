@@ -5,25 +5,17 @@ import {
 } from "@hdae/yomi";
 import { getDictionary } from "@hdae/yomi/browser";
 import {
-  type CleanRanges,
-  type DebertaSpecialTokens,
-  DebertaTokenizer,
+  buildDebertaTokenizer,
+  type DebertaTokenizer,
   encodeWav,
+  getDeberta,
   type Sbv2Adapter,
   Sbv2ModelAdapter,
   synthesizeText,
 } from "../../../src/mod.ts";
-import bundledVocabText from "./assets/deberta/vocab.txt?raw";
-import bundledCleanRangesText from "./assets/deberta/clean_ranges.json?raw";
-import bundledMetaText from "./assets/deberta/meta.json?raw";
 
 ort.env.wasm.wasmPaths =
   "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.27.0/dist/";
-
-/** Published quantized DeBERTa (int4 RTN b256). CORS + range enabled (HuggingFace resolve). */
-const DEBERTA_HF_URL =
-  "https://huggingface.co/hdae/deberta-v2-large-japanese-char-wwm-onnx-int4-rtn-b256/resolve/main/model.onnx";
-const DEBERTA_CACHE_NAME = "sbv2-deberta";
 
 export type Provider = "wasm" | "webgpu";
 
@@ -50,8 +42,9 @@ export type LoadRequest = {
   /** The acoustic model is always the user's own voice, so it stays a file input. */
   aivmxBytes: ArrayBuffer;
   /**
-   * When true the worker sources DeBERTa (HuggingFace, cached), the tokenizer
-   * (bundled with the app), and the dictionary (HuggingFace via getDictionary) itself.
+   * When true the worker sources everything itself: DeBERTa + tokenizer via
+   * getDeberta (HuggingFace, SHA-pinned, Cache API) and the dictionary via
+   * yomi's getDictionary (same pattern).
    */
   useBundledAssets: boolean;
   /** Provided only when useBundledAssets === false. */
@@ -86,98 +79,6 @@ let currentProvider: Provider | null = null;
 
 const toBytes = (buffer: ArrayBuffer): Uint8Array => new Uint8Array(buffer);
 
-/** View a Uint8Array as an exact ArrayBuffer (copying only when it is a subarray). */
-const bufferOf = (bytes: Uint8Array): ArrayBuffer =>
-  bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength
-    ? (bytes.buffer as ArrayBuffer)
-    : (bytes.buffer.slice(
-      bytes.byteOffset,
-      bytes.byteOffset + bytes.byteLength,
-    ) as ArrayBuffer);
-
-/**
- * Build the DeBERTa tokenizer from raw asset text. Both the bundled path and the
- * Advanced (manual) path go through here, so their behavior can never diverge.
- */
-const buildTokenizer = (
-  vocabText: string,
-  cleanRangesText: string,
-  metaText: string,
-): DebertaTokenizer => {
-  const clean = JSON.parse(cleanRangesText) as CleanRanges;
-  const meta = JSON.parse(metaText) as {
-    special_tokens: {
-      cls: { id: number };
-      sep: { id: number };
-      unk: { id: number };
-    };
-  };
-  const special: DebertaSpecialTokens = {
-    clsId: meta.special_tokens.cls.id,
-    sepId: meta.special_tokens.sep.id,
-    unkId: meta.special_tokens.unk.id,
-  };
-  return DebertaTokenizer.fromVocabText(vocabText, clean, special);
-};
-
-/**
- * Fetch the quantized DeBERTa model, caching it in the Cache API keyed by its
- * immutable URL so later loads are offline. Streams the body to report download
- * progress (throttled to one report per integer percent).
- */
-const fetchDebertaBytes = async (
-  onProgress?: (progress: LoadProgress) => void,
-): Promise<Uint8Array> => {
-  const hasCache = typeof caches !== "undefined";
-  if (hasCache) {
-    const cache = await caches.open(DEBERTA_CACHE_NAME);
-    const hit = await cache.match(DEBERTA_HF_URL);
-    if (hit) return new Uint8Array(await hit.arrayBuffer());
-  }
-
-  const response = await fetch(DEBERTA_HF_URL);
-  if (!response.ok) {
-    throw new Error(
-      `DeBERTa 取得失敗: HTTP ${response.status} ${response.statusText} (${DEBERTA_HF_URL})`,
-    );
-  }
-
-  const total = Number(response.headers.get("content-length") ?? 0) || undefined;
-  const body = response.body;
-  let bytes: Uint8Array;
-  if (body) {
-    const reader = body.getReader();
-    const chunks: Uint8Array[] = [];
-    let loaded = 0;
-    let lastPercent = -1;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value);
-      loaded += value.byteLength;
-      const percent = total ? Math.floor((loaded / total) * 100) : -1;
-      if (percent !== lastPercent) {
-        lastPercent = percent;
-        onProgress?.({ stage: "deberta", loaded, total });
-      }
-    }
-    bytes = new Uint8Array(loaded);
-    let offset = 0;
-    for (const chunk of chunks) {
-      bytes.set(chunk, offset);
-      offset += chunk.byteLength;
-    }
-  } else {
-    bytes = new Uint8Array(await response.arrayBuffer());
-  }
-
-  if (hasCache) {
-    const cache = await caches.open(DEBERTA_CACHE_NAME);
-    await cache.put(DEBERTA_HF_URL, new Response(bufferOf(bytes)));
-  }
-  return bytes;
-};
-
 export const release = async (): Promise<void> => {
   await adapter?.release();
   adapter = null;
@@ -198,14 +99,23 @@ export const load = async (
   let bertOnnxBytes: Uint8Array;
 
   if (request.useBundledAssets) {
-    onProgress?.({ stage: "tokenizer" });
-    tokenizer = buildTokenizer(
-      bundledVocabText,
-      bundledCleanRangesText,
-      bundledMetaText,
-    );
     onProgress?.({ stage: "deberta", loaded: 0, total: undefined });
-    bertOnnxBytes = await fetchDebertaBytes(onProgress);
+    // getDeberta fetches model.onnx + tokenizer assets as one SHA-pinned set from
+    // HuggingFace (Cache API cached, size/sha256 verified, self-healing) and
+    // returns a ready tokenizer — nothing is bundled with the app anymore.
+    const deberta = await getDeberta({
+      onProgress: (progress) => {
+        if (progress.path === "model.onnx") {
+          onProgress?.({
+            stage: "deberta",
+            loaded: progress.loaded,
+            total: progress.total,
+          });
+        }
+      },
+    });
+    tokenizer = deberta.tokenizer;
+    bertOnnxBytes = deberta.bertOnnxBytes;
     onProgress?.({ stage: "dictionary" });
     // getDictionary fetches the yomi-matched JTD1 dictionary from HuggingFace
     // (cached in the Cache API, gzip-decompressed, CRC-verified) and returns a
@@ -217,7 +127,7 @@ export const load = async (
       throw new Error("useBundledAssets=false ですが manual assets がありません");
     }
     onProgress?.({ stage: "tokenizer" });
-    tokenizer = buildTokenizer(
+    tokenizer = buildDebertaTokenizer(
       manual.vocabText,
       manual.cleanRangesText,
       manual.metaText,
