@@ -91,6 +91,10 @@ export default function App() {
   const [styleWeight, setStyleWeight] = useState(1);
   const [speakerId, setSpeakerId] = useState(0);
   const [loaded, setLoaded] = useState<Loaded | null>(null);
+  // status は進捗文字列でも上書きされる表示専用テキスト。ボタンのガードは機械状態 busy で行う
+  // （文字列一致だと load 進捗表示中に Load が再有効化され、合成中の Load/Release が
+  // 推論中セッションを release する競合を起こす）。
+  const [busy, setBusy] = useState<"loading" | "synthesizing" | null>(null);
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState<string | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -178,6 +182,7 @@ export default function App() {
     // No acoustic model chosen, or the lifecycle effect has not assigned the worker yet.
     if (!aivmx || !worker) return;
     setError(null);
+    setBusy("loading");
     setStatus("loading");
     setMetrics([]);
     try {
@@ -213,6 +218,8 @@ export default function App() {
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
       setStatus("load failed");
+    } finally {
+      setBusy(null);
     }
   };
 
@@ -220,6 +227,7 @@ export default function App() {
     const worker = workerRef.current;
     if (!loaded || !worker) return;
     setError(null);
+    setBusy("synthesizing");
     setStatus("synthesizing");
     try {
       const result = await worker.synthesize({
@@ -249,6 +257,8 @@ export default function App() {
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
       setStatus("synthesis failed");
+    } finally {
+      setBusy(null);
     }
   };
 
@@ -372,14 +382,14 @@ export default function App() {
             <div className="mt-4 flex flex-wrap gap-2">
               <Button
                 onClick={loadModels}
-                disabled={!readyToLoad || status === "loading"}
+                disabled={!readyToLoad || busy !== null}
               >
                 Load models
               </Button>
               <Button
                 variant="outline"
                 onClick={resetLoaded}
-                disabled={!loaded}
+                disabled={!loaded || busy !== null}
               >
                 <RotateCcw className="h-4 w-4" />
                 Release
@@ -398,7 +408,7 @@ export default function App() {
             <div className="mt-4 flex flex-wrap gap-2">
               <Button
                 onClick={synthesize}
-                disabled={!canSynthesize || status === "synthesizing"}
+                disabled={!canSynthesize || busy !== null}
               >
                 <Play className="h-4 w-4" />
                 Synthesize
