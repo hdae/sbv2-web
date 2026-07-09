@@ -100,15 +100,25 @@ export class Sbv2Adapter implements ModelAdapter {
     scalars?: SynthScalars;
     sessionOptions?: OrtSessionOptions;
   }): Promise<Sbv2Adapter> {
+    // 純検証を先に済ませる（ここで落ちればセッション未生成のまま fail loud できる）。
+    const styleMatrix = parseStyleMatrix(args.styleVectorsNpy);
     const acoustic = await backend.createSession(
       args.acousticOnnxBytes,
       args.sessionOptions,
     );
-    const bert = await backend.createSession(
-      args.bertOnnxBytes,
-      args.sessionOptions,
-    );
-    const styleMatrix = parseStyleMatrix(args.styleVectorsNpy);
+    let bert: InferenceSession;
+    try {
+      bert = await backend.createSession(
+        args.bertOnnxBytes,
+        args.sessionOptions,
+      );
+    } catch (error) {
+      // static ファクトリはインスタンスを返す前に throw すると呼び出し側が acoustic を
+      // 解放できない（ハンドルが無い）。生成済みセッションを解放してから投げ直す。
+      // 解放自体の失敗は元エラーを隠さないよう握りつぶす（エラー経路の後始末に限る）。
+      await acoustic.release().catch(() => {});
+      throw error;
+    }
     return new Sbv2Adapter({
       backend,
       acoustic,
