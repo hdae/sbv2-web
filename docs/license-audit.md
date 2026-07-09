@@ -13,7 +13,9 @@ It excludes tests and does not include data, model files, dictionaries, Python
 tools, or generated HuggingFace packages.
 
 No GPL, LGPL, or AGPL dependency is imported by the published TypeScript
-entrypoint. The runtime dependencies are @hdae/yomi and onnxruntime-web.
+entrypoints (`.` and `./node`). The runtime dependencies are @hdae/yomi (MIT),
+onnxruntime-web for `.`, onnxruntime-node for `./node`, and onnxruntime-common
+as the shared type layer (all ONNX Runtime packages are MIT).
 
 ## SYMBOLS Table
 

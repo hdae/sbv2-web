@@ -52,19 +52,11 @@ Operational notes: the native addon needs `libstdc++` on the loader path (set
 (`deno task check:node`), kept out of the default `deno task check` so CI does
 not download the heavy native package.
 
-## Dictionary is not bundled yet
-
-The JTD dictionary (`naist-jdic.jtd`, ~18 MB) is intentionally not committed.
-The browser lab's default (bundled-assets) path fetches it same-origin from
-`examples/browser/public/dict/naist-jdic.jtd`, so on a fresh checkout you must
-place the file there yourself, or use the Advanced toggle to pick it manually.
-Hosting it on HuggingFace (fetched like the DeBERTa model) is planned and will
-remove this step.
-
 ## Bench harness defaults reference locally generated assets
 
 `tools/bench/run_matrix.ts` and `tools/bench/smoke_one.ts` default to model/dict
 directories that are produced by the Python tooling and live under the
-gitignored `data/`. They are overridable via flags, but do not run out of the
-box on a fresh checkout — regenerate the assets with `tools/model-tools` first,
-or pass explicit paths.
+gitignored `data/`, so they do not run out of the box on a fresh checkout —
+regenerate the assets with `tools/model-tools` first. `smoke_one.ts` accepts
+explicit paths via flags (`--acoustic`/`--deberta`/`--tokenizer`/`--dict`);
+`run_matrix.ts` has a hardcoded combo matrix and must be edited in source.
