@@ -1,0 +1,39 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": [
+      "DOM",
+      "DOM.Iterable",
+      "ES2022"
+    ],
+    "allowImportingTsExtensions": true,
+    "skipLibCheck": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "strict": true,
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ],
+      "@hdae/yomi": [
+        "./node_modules/@hdae/yomi/_dist/src/mod.d.ts"
+      ],
+      "@hdae/yomi/browser": [
+        "./node_modules/@hdae/yomi/_dist/src/browser/mod.d.ts"
+      ],
+      "onnxruntime-common": [
+        "./node_modules/onnxruntime-common"
+      ],
+      "onnxruntime-web": [
+        "./node_modules/onnxruntime-web"
+      ]
+    }
+  },
+  "include": [
+    "src"
+  ]
+}

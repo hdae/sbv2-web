@@ -1,0 +1,56 @@
+// @hdae/sbv2-web core: runtime-agnostic pieces shared by the web (`.`) and node
+// (`./node`) entries. This barrel pulls in NO ONNX Runtime; each public entry
+// re-exports it together with its own backend adapter.
+
+export const VERSION = "0.1.0";
+
+export {
+  type CleanRanges,
+  type DebertaSpecialTokens,
+  DebertaTokenizer,
+} from "./text/deberta_tokenizer.ts";
+export { buildBaseWord2ph, distributePhone } from "./text/word2ph.ts";
+export {
+  JP_LANGUAGE_ID,
+  JP_TONE_OFFSET,
+  phonesToIds,
+  SYMBOL_TO_ID,
+  SYMBOLS,
+} from "./text/symbols.ts";
+export { type Sbv2PhoneTone, toSbv2PhoneTone } from "./text/phone_tone.ts";
+export { type Npy2dFloat32, parseNpy2dFloat32 } from "./runtime/npy.ts";
+export {
+  type AivmxMetadata,
+  base64ToBytes,
+  extractMetadataValue,
+  extractStyleVectorsNpy,
+  getSamplingRate,
+  readAivmxMetadata,
+} from "./runtime/aivmx_meta.ts";
+export {
+  addBlankWord2ph,
+  BERT_DIM,
+  intersperse,
+  type ModelIdSequences,
+  parseStyleMatrix,
+  phonesTonesToModelIds,
+  styleVector,
+  tileBertToPhoneLevel,
+} from "./runtime/tensor_build.ts";
+export {
+  type AcousticFeeds,
+  DEFAULT_SCALARS,
+  type ModelAdapter,
+  type SynthInput,
+  type SynthScalars,
+} from "./runtime/adapter_types.ts";
+export {
+  type OrtBackend,
+  type OrtSessionOptions,
+  Sbv2Adapter,
+} from "./runtime/adapter_core.ts";
+export {
+  type SynthesizeOptions,
+  synthesizeText,
+} from "./runtime/synthesize.ts";
+export { encodeWav } from "./runtime/wav.ts";
