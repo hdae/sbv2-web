@@ -1,9 +1,8 @@
 {
   "version": "5",
   "specifiers": {
-    "jsr:@hdae/fetch-cache@0.1": "0.1.0",
     "jsr:@hdae/fetch-cache@0.3": "0.3.0",
-    "jsr:@hdae/yomi@0.4": "0.4.0",
+    "jsr:@hdae/yomi@0.4": "0.4.1",
     "jsr:@std/assert@1": "1.0.19",
     "jsr:@std/internal@^1.0.12": "1.0.14",
     "npm:onnxruntime-common@1.27.0": "1.27.0",
@@ -11,16 +10,13 @@
     "npm:onnxruntime-web@1.27.0": "1.27.0"
   },
   "jsr": {
-    "@hdae/fetch-cache@0.1.0": {
-      "integrity": "1650ff2dab0d8226c4fe072b666bcdbaf6b9c5fc790a14db370c29e804c391c5"
-    },
     "@hdae/fetch-cache@0.3.0": {
       "integrity": "67f0ab1be8c2d87d4df5321d9d1b36cc3b44a92f9ee1b97ba3edd4dcb25b316d"
     },
-    "@hdae/yomi@0.4.0": {
-      "integrity": "7801adf7d50bd0f57b3818261800b30fe7abffd5c3594868d8af31cbb89cc3d8",
+    "@hdae/yomi@0.4.1": {
+      "integrity": "16567a79abee83ffe07c422bb8292157c87915d95ffb544a0bf9b4e1fcd9d283",
       "dependencies": [
-        "jsr:@hdae/fetch-cache@0.1"
+        "jsr:@hdae/fetch-cache"
       ]
     },
     "@std/assert@1.0.19": {
@@ -64,8 +60,8 @@
     "@protobufjs/utf8@1.1.2": {
       "integrity": "sha512-b1UQwcEZ4yCnMCD8DAL1VlbvBJE9/IX4FTIp7BG1xYpf29SLazLSrqUkj4w7Y5y7cCVP6E5tcqqcI0xemPkHug=="
     },
-    "@types/node@26.1.0": {
-      "integrity": "sha512-O0A1G3xPGy4w7AgQdAQYUlQ+BKk2Oovw8eRpofyp5KdBZULnbe+WqaOVNrm705SHphCiG4XHsACrSmPu1f+Kgw==",
+    "@types/node@26.1.1": {
+      "integrity": "sha512-nxAkRSVkN1Y0JC1W8ky/fTfkGsMmcrRsbx+3XoZE+rMOX71kLYTV7fLXpqud1GpbpP5TuffXFqfX7fH2GgZREw==",
       "dependencies": [
         "undici-types"
       ]
