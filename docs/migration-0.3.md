@@ -27,3 +27,11 @@
 
 辞書ローダは `@hdae/yomi/browser` → `@hdae/yomi/loader`（yomi ADR-0006）。
 `getDictionary()` の使い方は不変。
+
+## 追加 API: `toBertText(words)`
+
+DeBERTa 入力テキスト（本家の norm_text 相当）を語アライメントから組むヘルパ。
+yomi 0.4.0 の語アライメントは記号要素の surface に生の1文字（`。` `！` 等）を
+保持するため、surface を手書きで連結すると DeBERTa の見るトークンが本家
+（`replace_punctuation` 済み）とずれる。**`SynthInput` を自前で組んでいる消費者は
+bertText の組み立てをこの関数に置き換えること**（`synthesizeText` は内部で使用）。

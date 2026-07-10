@@ -18,6 +18,7 @@ export {
   SYMBOLS,
 } from "./text/symbols.ts";
 export { type Sbv2PhoneTone, toSbv2PhoneTone } from "./text/phone_tone.ts";
+export { toBertText } from "./text/bert_text.ts";
 export {
   buildDebertaTokenizer,
   DEBERTA_REPO,

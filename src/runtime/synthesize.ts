@@ -17,6 +17,7 @@ import {
   type OverlayDictionary,
 } from "@hdae/yomi";
 import { toSbv2PhoneTone } from "../text/phone_tone.ts";
+import { toBertText } from "../text/bert_text.ts";
 import type { DebertaTokenizer } from "../text/deberta_tokenizer.ts";
 import { buildBaseWord2ph } from "../text/word2ph.ts";
 import type { ModelAdapter, SynthScalars } from "./adapter_types.ts";
@@ -46,8 +47,8 @@ export type SynthesizeOptions = {
  * 手順（解析は 1 回だけ = analyzeWithWords）:
  *   1. { result, words } = analyzeWithWords(dict, text, overlay)  ← 解析はここ 1 回のみ
  *   2. { phones, tones } = toSbv2PhoneTone(result)
- *   3. bertText = 語アライメント surface の連結（DeBERTa 入力は
- *      norm_text 直接ではなく sep_text 連結相当 = 語 surface 連結）
+ *   3. bertText = toBertText(words)（語 surface 連結・記号は正規形へ =
+ *      本家 replace_punctuation 済み norm_text 相当）
  *   4. baseWord2ph = buildBaseWord2ph(words, tokenizer, phones.length)
  *   5. adapter.synthesize({ phones, tones, bertText, baseWord2ph, styleId, styleWeight, speakerId })
  *
@@ -68,9 +69,10 @@ export const synthesizeText = async (
   const { result, words } = analyzeWithWords(dict, text, opts.overlay);
 
   const { phones, tones } = toSbv2PhoneTone(result);
-  // DeBERTa 入力は語アライメント surface の連結。word2ph が
-  // Σtokenize(surface) ベースのため、norm_text 全体の直接トークナイズとは長さがずれる。
-  const bertText = words.map((w) => w.surface).join("");
+  // DeBERTa 入力は語アライメントからの norm_text 相当（記号は正規形へ — 本家
+  // replace_punctuation 対応）。word2ph が Σtokenize(surface) ベースのため、
+  // normalizedText 全体の直接トークナイズとは長さがずれ得る。
+  const bertText = toBertText(words);
   const baseWord2ph = buildBaseWord2ph(words, tokenizer, phones.length);
 
   const wave = await adapter.synthesize({
