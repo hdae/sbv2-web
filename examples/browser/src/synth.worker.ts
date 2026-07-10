@@ -17,7 +17,7 @@ import {
   synthesizeText,
 } from "../../../src/mod.ts";
 
-export type { AivmManifest } from "../../../src/mod.ts";
+export type { AivmManifest, AivmSpeaker } from "../../../src/mod.ts";
 
 ort.env.wasm.wasmPaths =
   "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.27.0/dist/";
@@ -62,10 +62,11 @@ export type LoadResult = {
   sampleRate: number;
   numStyles: number;
   /**
-   * AIVM 1.0 manifest from the aivmx metadata, assets stripped (icon / voice
-   * sample data URLs dropped) so the structured clone back to the UI stays a
-   * few KB. Omitted when the model has no aivm_manifest key (plain .onnx) —
-   * the UI then falls back to raw numeric speaker/style inputs.
+   * AIVM 1.0 manifest from the aivmx metadata, WITH assets (icon / voice
+   * sample data URLs) because the UI actually serves them — speaker avatar
+   * and sample playback. The structured clone back to the UI is a few MB,
+   * once per load. Omitted when the model has no aivm_manifest key (plain
+   * .onnx) — the UI then falls back to raw numeric speaker/style inputs.
    */
   manifest?: AivmManifest;
 };
@@ -155,7 +156,7 @@ export const load = async (
   const manifest =
     extractMetadataValue(aivmxBytes, "aivm_manifest") === undefined
       ? undefined
-      : readAivmxManifest(aivmxBytes);
+      : readAivmxManifest(aivmxBytes, { stripAssets: false });
   adapter = await Sbv2ModelAdapter.createFromAivmx({
     aivmxBytes,
     bertOnnxBytes,

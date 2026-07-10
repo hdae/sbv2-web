@@ -60,9 +60,7 @@ cold. Keep this to a screenful.
   [docs/migration-0.2.md](../docs/migration-0.2.md) to the light-sbv2 agent.
 - Deferred: assist_text (BERT-space emotion reference — needs a second DeBERTa
   pass); pitch/intonation post-processing (needs a WORLD port, quality loss);
-  browser offline int64→int32 conversion (validation spike first); browser lab
-  speaker icon / voice-sample display (`stripAssets: false` — user wants it,
-  explicitly deferred after the manifest card landed).
+  browser offline int64→int32 conversion (validation spike first).
 - `public/dict/naist-jdic.jtd` stays gitignored-but-tracked until the init
   squash.
 

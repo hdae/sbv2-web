@@ -1,7 +1,25 @@
-import { Activity, Download, Play, RotateCcw } from "lucide-react";
+import {
+  Activity,
+  ChevronsUpDown,
+  Download,
+  Play,
+  RotateCcw,
+  Square,
+} from "lucide-react";
 import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { endpointSymbol, proxy } from "vite-plugin-comlink/symbol";
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+} from "./components/ui/avatar";
+import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "./components/ui/collapsible";
 import { Input } from "./components/ui/input";
 import { Label } from "./components/ui/label";
 import {
@@ -14,6 +32,7 @@ import {
 import { Textarea } from "./components/ui/textarea";
 import type {
   AivmManifest,
+  AivmSpeaker,
   LoadProgress,
   LoadRequest,
   ManualAssets,
@@ -122,9 +141,46 @@ export default function App() {
       manifest.speakers[0]
     : undefined;
 
-  const selectSpeaker = (value: string) => {
+  // Single shared player for manifest voice samples: starting one stops the
+  // previous, so two data-URL clips never overlap.
+  const [playingSample, setPlayingSample] = useState<string | null>(null);
+  const sampleAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  const stopSample = () => {
+    sampleAudioRef.current?.pause();
+    sampleAudioRef.current = null;
+    setPlayingSample(null);
+  };
+
+  const toggleSample = (key: string, dataUrl: string) => {
+    if (playingSample === key) {
+      stopSample();
+      return;
+    }
+    sampleAudioRef.current?.pause();
+    const audio = new Audio(dataUrl);
+    audio.onended = () =>
+      setPlayingSample((prev) => (prev === key ? null : prev));
+    sampleAudioRef.current = audio;
+    setPlayingSample(key);
+    void audio.play();
+  };
+
+  // Stop the sample player on unmount (ref-only cleanup, hence empty deps).
+  useEffect(() => () => {
+    sampleAudioRef.current?.pause();
+  }, []);
+
+  const selectStyle = (nextId: number) => {
+    // The sample list follows the selected style; stop so no orphaned clip
+    // keeps playing without a visible stop button.
+    stopSample();
+    setStyleId(nextId);
+  };
+
+  const selectSpeaker = (nextId: number) => {
     if (!manifest) return;
-    const nextId = Number(value);
+    stopSample();
     setSpeakerId(nextId);
     // Styles are listed per speaker in the manifest, so keep styleId valid for
     // the newly selected speaker.
@@ -183,6 +239,7 @@ export default function App() {
     };
 
   const resetLoaded = async () => {
+    stopSample();
     await workerRef.current?.release();
     setLoaded(null);
     setStatus("idle");
@@ -393,7 +450,7 @@ export default function App() {
                           value: String(speaker.localId),
                           label: speaker.name + " (" + speaker.localId + ")",
                         }))}
-                        onChange={selectSpeaker}
+                        onChange={(value) => selectSpeaker(Number(value))}
                       />
                       <SelectField
                         label="Style"
@@ -402,7 +459,7 @@ export default function App() {
                           value: String(style.localId),
                           label: style.name + " (" + style.localId + ")",
                         }))}
-                        onChange={(value) => setStyleId(Number(value))}
+                        onChange={(value) => selectStyle(Number(value))}
                       />
                       <NumberField
                         label="Style weight"
@@ -506,6 +563,27 @@ export default function App() {
         </div>
 
         <aside className="space-y-5">
+          {loaded && (
+            manifest && manifestSpeaker
+              ? (
+                <ManifestCard
+                  manifest={manifest}
+                  selectedSpeaker={manifestSpeaker}
+                  styleId={styleId}
+                  onSelectSpeaker={selectSpeaker}
+                  onSelectStyle={selectStyle}
+                  playingSample={playingSample}
+                  onToggleSample={toggleSample}
+                />
+              )
+              : (
+                <div className="rounded-lg border p-4 text-sm text-muted-foreground">
+                  No AIVM manifest in this model — speaker / style stay raw
+                  numeric IDs.
+                </div>
+              )
+          )}
+
           <div className="rounded-lg border p-4">
             <h2 className="text-sm font-semibold">Selected files</h2>
             <dl className="mt-3 space-y-2 text-sm">
@@ -517,17 +595,6 @@ export default function App() {
               ))}
             </dl>
           </div>
-
-          {loaded && (
-            manifest
-              ? <ManifestCard manifest={manifest} />
-              : (
-                <div className="rounded-lg border p-4 text-sm text-muted-foreground">
-                  No AIVM manifest in this model — speaker / style stay raw
-                  numeric IDs.
-                </div>
-              )
-          )}
 
           <div className="rounded-lg border p-4">
             <h2 className="text-sm font-semibold">Metrics</h2>
@@ -607,67 +674,190 @@ const SelectField = (
 
 const manifestRows = (manifest: AivmManifest): [string, string][] => {
   const rows: [string, string][] = [
+    [
+      "version",
+      manifest.version + " (manifest " + manifest.manifestVersion + ")",
+    ],
     ["architecture", manifest.modelArchitecture],
     ["format", manifest.modelFormat],
+    ["license", manifest.license ? "included" : "not included"],
   ];
-  if (manifest.creators?.length) {
-    rows.push(["creators", manifest.creators.join(", ")]);
-  }
   if (manifest.trainingEpochs !== undefined) {
     rows.push(["epochs", String(manifest.trainingEpochs)]);
   }
   if (manifest.trainingSteps !== undefined) {
     rows.push(["steps", String(manifest.trainingSteps)]);
   }
-  rows.push(["uuid", manifest.uuid]);
-  rows.push(["license", manifest.license ? "included" : "not included"]);
+  rows.push(["model uuid", manifest.uuid]);
+  for (const speaker of manifest.speakers) {
+    const suffix = manifest.speakers.length > 1
+      ? " (" + speaker.name + ")"
+      : "";
+    rows.push(["speaker uuid" + suffix, speaker.uuid]);
+    if (speaker.supportedLanguages.length > 0) {
+      rows.push(["languages" + suffix, speaker.supportedLanguages.join(", ")]);
+    }
+  }
   return rows;
 };
 
-const ManifestCard = ({ manifest }: { manifest: AivmManifest }) => (
-  <div className="rounded-lg border p-4">
-    <h2 className="text-sm font-semibold">Model</h2>
-    <p className="mt-2 text-sm font-medium">
-      {manifest.name}
-      <span className="ml-2 text-muted-foreground">v{manifest.version}</span>
-    </p>
-    {manifest.description && (
-      <p className="mt-1 break-words text-xs text-muted-foreground">
-        {manifest.description}
-      </p>
-    )}
-    <dl className="mt-3 space-y-2 text-sm">
-      {manifestRows(manifest).map(([name, value]) => (
-        <div key={name} className="grid grid-cols-[96px_1fr] gap-3">
-          <dt className="text-muted-foreground">{name}</dt>
-          <dd className="min-w-0 break-words">{value}</dd>
-        </div>
-      ))}
-    </dl>
-    <div className="mt-3 space-y-2 text-sm">
-      {manifest.speakers.map((speaker) => (
-        <div key={speaker.uuid} className="rounded-md bg-muted px-3 py-2">
-          <p className="font-medium">
-            {speaker.name}
-            <span className="ml-2 text-xs font-normal text-muted-foreground">
-              sid {speaker.localId}
-            </span>
+type ManifestCardProps = {
+  manifest: AivmManifest;
+  selectedSpeaker: AivmSpeaker;
+  styleId: number;
+  onSelectSpeaker: (localId: number) => void;
+  onSelectStyle: (localId: number) => void;
+  playingSample: string | null;
+  onToggleSample: (key: string, dataUrl: string) => void;
+};
+
+const ManifestCard = ({
+  manifest,
+  selectedSpeaker,
+  styleId,
+  onSelectSpeaker,
+  onSelectStyle,
+  playingSample,
+  onToggleSample,
+}: ManifestCardProps) => {
+  // Same drift guard as the App-level speaker lookup: badges/selects only
+  // offer manifest values, so the fallback fires only on state drift.
+  const selectedStyle =
+    selectedSpeaker.styles.find((style) => style.localId === styleId) ??
+      selectedSpeaker.styles[0];
+  return (
+    <div className="space-y-4 rounded-lg border p-4">
+      {/* Tier 1 — identity: whose voice this is. */}
+      <div className="flex items-start gap-3">
+        <Avatar className="size-14 rounded-xl after:rounded-xl">
+          <AvatarImage
+            src={selectedSpeaker.icon}
+            alt={selectedSpeaker.name}
+            className="rounded-xl"
+          />
+          <AvatarFallback className="rounded-xl text-lg">
+            {selectedSpeaker.name.slice(0, 1)}
+          </AvatarFallback>
+        </Avatar>
+        <div className="min-w-0 flex-1">
+          <h2 className="truncate text-base font-semibold">
+            {selectedSpeaker.name}
+          </h2>
+          <p className="truncate text-xs text-muted-foreground">
+            {manifest.name} · v{manifest.version}
           </p>
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {speaker.styles.map((style) => (
-              <span
-                key={style.localId}
-                className="rounded border px-1.5 py-0.5 text-xs"
-              >
-                {style.name} ({style.localId})
-              </span>
-            ))}
-          </div>
+          {manifest.creators && manifest.creators.length > 0 && (
+            <p className="truncate text-xs text-muted-foreground">
+              by {manifest.creators.join(", ")}
+            </p>
+          )}
         </div>
-      ))}
+      </div>
+
+      {manifest.description && (
+        <p className="line-clamp-3 text-xs leading-relaxed text-muted-foreground">
+          {manifest.description}
+        </p>
+      )}
+
+      {manifest.speakers.length > 1 && (
+        <div className="flex flex-wrap gap-1.5">
+          {manifest.speakers.map((speaker) => {
+            const selected = speaker.localId === selectedSpeaker.localId;
+            return (
+              <Badge
+                key={speaker.uuid}
+                variant={selected ? "default" : "outline"}
+                render={
+                  <button
+                    type="button"
+                    className="cursor-pointer"
+                    aria-pressed={selected}
+                    onClick={() => onSelectSpeaker(speaker.localId)}
+                  />
+                }
+              >
+                {speaker.name}
+              </Badge>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-1.5">
+        {selectedSpeaker.styles.map((style) => {
+          const selected = style.localId === selectedStyle.localId;
+          return (
+            <Badge
+              key={style.localId}
+              variant={selected ? "default" : "outline"}
+              render={
+                <button
+                  type="button"
+                  className="cursor-pointer"
+                  aria-pressed={selected}
+                  onClick={() => onSelectStyle(style.localId)}
+                />
+              }
+            >
+              {style.name}
+            </Badge>
+          );
+        })}
+      </div>
+
+      {/* Tier 2 — hear it: the selected style's bundled voice samples. */}
+      {selectedStyle.voiceSamples.length > 0 && (
+        <div className="space-y-2">
+          {selectedStyle.voiceSamples.map((sample, index) => {
+            const key = selectedSpeaker.uuid + ":" + selectedStyle.localId +
+              ":" + index;
+            const playing = playingSample === key;
+            return (
+              <div
+                key={key}
+                className="flex items-start gap-2.5 rounded-md bg-muted px-3 py-2"
+              >
+                <Button
+                  variant={playing ? "default" : "outline"}
+                  size="icon-sm"
+                  className="mt-0.5 shrink-0 rounded-full"
+                  aria-label={playing ? "Stop sample" : "Play sample"}
+                  onClick={() => onToggleSample(key, sample.audio)}
+                >
+                  {playing
+                    ? <Square className="size-3" />
+                    : <Play className="size-3" />}
+                </Button>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  {sample.transcript}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Tier 3 — provenance details, folded away by default. */}
+      <Collapsible>
+        <CollapsibleTrigger className="flex w-full cursor-pointer items-center justify-between rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-muted">
+          Details
+          <ChevronsUpDown className="size-4 text-muted-foreground" />
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <dl className="mt-3 space-y-2 text-sm">
+            {manifestRows(manifest).map(([name, value]) => (
+              <div key={name} className="grid grid-cols-[96px_1fr] gap-3">
+                <dt className="text-muted-foreground">{name}</dt>
+                <dd className="min-w-0 break-words">{value}</dd>
+              </div>
+            ))}
+          </dl>
+        </CollapsibleContent>
+      </Collapsible>
     </div>
-  </div>
-);
+  );
+};
 
 type NumberFieldProps = {
   label: string;
