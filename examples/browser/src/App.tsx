@@ -372,21 +372,16 @@ export default function App() {
 
           <div className="rounded-lg border p-4">
             <div className="grid gap-4 md:grid-cols-[160px_1fr]">
-              <div className="space-y-2">
-                <Label htmlFor="provider">Provider</Label>
-                <Select
-                  value={provider}
-                  onValueChange={(value) => setProvider(value as Provider)}
-                >
-                  <SelectTrigger id="provider" className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="wasm">WASM</SelectItem>
-                    <SelectItem value="webgpu">WebGPU</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <SelectField
+                id="provider"
+                label="Provider"
+                value={provider}
+                options={[
+                  { value: "wasm", label: "WASM" },
+                  { value: "webgpu", label: "WebGPU" },
+                ]}
+                onChange={(value) => setProvider(value as Provider)}
+              />
               <div className="grid gap-3 sm:grid-cols-3">
                 {manifest && manifestSpeaker
                   ? (
@@ -574,23 +569,29 @@ const FileField = ({ label, accept, onChange }: FileFieldProps) => (
 );
 
 type SelectFieldProps = {
+  id?: string;
   label: string;
   value: string;
   options: { value: string; label: string }[];
   onChange: (value: string) => void;
 };
 
-const SelectField = ({ label, value, options, onChange }: SelectFieldProps) => (
+const SelectField = (
+  { id, label, value, options, onChange }: SelectFieldProps,
+) => (
   <div className="space-y-2">
-    <Label>{label}</Label>
+    <Label htmlFor={id}>{label}</Label>
+    {/* items is what makes SelectValue render the option label — without it
+        Base UI displays the raw value string in the trigger. */}
     <Select
+      items={options}
       value={value}
       onValueChange={(next) => {
         // Base UI emits null on deselection; these selects always hold a value.
         if (typeof next === "string") onChange(next);
       }}
     >
-      <SelectTrigger className="w-full">
+      <SelectTrigger id={id} className="w-full">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
