@@ -17,7 +17,11 @@ import type { SynthInput } from "./adapter_types.ts";
  * 検証内容:
  * - phones が非空で全て既知の SBV2 記号、tones が同長で各値 0/1 の整数
  * - styleId / speakerId が 0 以上の整数、styleWeight / scalars が有限数
- * - baseWord2ph が両端 1 の正整数列で、総和 === phones.length
+ * - baseWord2ph が両端 1 の**非負**整数列で、総和 === phones.length
+ *   （0 は「その文字に音素を割り当てない」の正当値。実在する: "…" は音素 1 個だが
+ *     char トークナイザの NFKC で "..." の 3 トークンに展開されるため、
+ *     distributePhone(1,3) = [1,0,0] が生成経路から普通に出てくる。
+ *     tile 展開は 0 個複製として扱い、総和整合はこの検査が守る）
  * - tokenizer を渡した場合のみ: baseWord2ph.length === tokenize(bertText).length + 2
  *   （DeBERTa トークン数との整合。渡さなければこの検査はスキップ）
  */
@@ -81,9 +85,9 @@ export const validateSynthInput = (
   }
   for (let i = 0; i < baseWord2ph.length; i++) {
     const n = baseWord2ph[i];
-    if (!(Number.isInteger(n) && n >= 1)) {
+    if (!(Number.isInteger(n) && n >= 0)) {
       throw new Error(
-        `validateSynthInput: baseWord2ph[${i}] が正整数でない: ${n}`,
+        `validateSynthInput: baseWord2ph[${i}] が非負整数でない: ${n}`,
       );
     }
   }

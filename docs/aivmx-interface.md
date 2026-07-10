@@ -92,9 +92,12 @@ server synthesizing from user-edited accent phrases) can build the
 
 - `phones` — SBV2 symbols including both `_` pads and punctuation, pre
   `add_blank`; `tones` — same length, values 0/1 (pre +6).
-- `baseWord2ph` — both-end sentinels are `1`, every entry a positive integer,
-  `sum(baseWord2ph) === phones.length`, and
-  `baseWord2ph.length === tokenize(bertText).length + 2` (DeBERTa char tokens).
+- `baseWord2ph` — both-end sentinels are `1`, every entry a non-negative
+  integer (`0` = "assign no phones to this char"; it legitimately occurs: `"…"`
+  is one phone but NFKC-expands to the 3 char tokens `"..."`, so
+  `distributePhone(1, 3) = [1, 0, 0]`), `sum(baseWord2ph) === phones.length`,
+  and `baseWord2ph.length === tokenize(bertText).length + 2` (DeBERTa char
+  tokens).
 - `scalars` — optional per-call partial override merged over the adapter
   defaults; non-finite values throw.
 

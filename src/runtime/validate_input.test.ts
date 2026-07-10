@@ -80,7 +80,12 @@ Deno.test("validateSynthInput: baseWord2ph の不変条件を弾く", () => {
   assertThrows(
     () => validateSynthInput({ ...VALID, baseWord2ph: [1, 1.5, 1] }),
     Error,
-    "正整数でない",
+    "非負整数でない",
+  );
+  assertThrows(
+    () => validateSynthInput({ ...VALID, baseWord2ph: [1, -1, 1] }),
+    Error,
+    "非負整数でない",
   );
   assertThrows(
     () => validateSynthInput({ ...VALID, baseWord2ph: [2, 1, 1] }),
@@ -93,6 +98,12 @@ Deno.test("validateSynthInput: baseWord2ph の不変条件を弾く", () => {
     Error,
     "sum(baseWord2ph)",
   );
+});
+
+Deno.test("validateSynthInput: baseWord2ph の 0 は正当（音素を割り当てない文字）", () => {
+  // "…"（1 音素）が NFKC で 3 トークンに展開されると distributePhone(1,3)=[1,0,0]。
+  // 総和が phones.length と一致する限り 0 要素は valid。
+  validateSynthInput({ ...VALID, baseWord2ph: [1, 0, 1, 1] }); // sum=3=phones.length
 });
 
 Deno.test("validateSynthInput: tokenizer 併用で DeBERTa トークン数との不整合を弾く", () => {
