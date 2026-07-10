@@ -5,14 +5,19 @@ import {
 } from "@hdae/yomi";
 import { getDictionary } from "@hdae/yomi/browser";
 import {
+  type AivmManifest,
   buildDebertaTokenizer,
   type DebertaTokenizer,
   encodeWav,
+  extractMetadataValue,
   getDeberta,
+  readAivmxManifest,
   type Sbv2Adapter,
   Sbv2ModelAdapter,
   synthesizeText,
 } from "../../../src/mod.ts";
+
+export type { AivmManifest } from "../../../src/mod.ts";
 
 ort.env.wasm.wasmPaths =
   "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.27.0/dist/";
@@ -56,6 +61,13 @@ export type LoadResult = {
   elapsedMs: number;
   sampleRate: number;
   numStyles: number;
+  /**
+   * AIVM 1.0 manifest from the aivmx metadata, assets stripped (icon / voice
+   * sample data URLs dropped) so the structured clone back to the UI stays a
+   * few KB. Omitted when the model has no aivm_manifest key (plain .onnx) —
+   * the UI then falls back to raw numeric speaker/style inputs.
+   */
+  manifest?: AivmManifest;
 };
 
 export type SynthesizeRequest = {
@@ -137,8 +149,15 @@ export const load = async (
   }
 
   onProgress?.({ stage: "acoustic" });
+  const aivmxBytes = toBytes(request.aivmxBytes);
+  // Manifest absence is a supported case (plain .onnx accepted by the file
+  // input); a present-but-broken manifest still throws (fail loud).
+  const manifest =
+    extractMetadataValue(aivmxBytes, "aivm_manifest") === undefined
+      ? undefined
+      : readAivmxManifest(aivmxBytes);
   adapter = await Sbv2ModelAdapter.createFromAivmx({
-    aivmxBytes: toBytes(request.aivmxBytes),
+    aivmxBytes,
     bertOnnxBytes,
     tokenizer,
     sessionOptions: { executionProviders: [request.provider] },
@@ -150,6 +169,7 @@ export const load = async (
     elapsedMs: Math.round(performance.now() - started),
     sampleRate: adapter.sampleRate,
     numStyles: adapter.numStyles,
+    manifest,
   };
 };
 

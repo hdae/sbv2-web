@@ -13,6 +13,7 @@ import {
 } from "./components/ui/select";
 import { Textarea } from "./components/ui/textarea";
 import type {
+  AivmManifest,
   LoadProgress,
   LoadRequest,
   ManualAssets,
@@ -32,6 +33,8 @@ type Loaded = {
   provider: Provider;
   sampleRate: number;
   numStyles: number;
+  /** Present only for aivmx models carrying an AIVM manifest (assets stripped). */
+  manifest?: AivmManifest;
 };
 
 type SynthWorker = typeof import("./synth.worker");
@@ -109,6 +112,27 @@ export default function App() {
         files.meta && files.dict,
     );
   const canSynthesize = Boolean(loaded && text.trim());
+
+  const manifest = loaded?.manifest;
+  // loadModels snaps speakerId into the manifest and the manifest-mode UI only
+  // offers manifest values, so find() misses only on state drift; fall back to
+  // the first speaker rather than rendering an empty style list.
+  const manifestSpeaker = manifest
+    ? manifest.speakers.find((speaker) => speaker.localId === speakerId) ??
+      manifest.speakers[0]
+    : undefined;
+
+  const selectSpeaker = (value: string) => {
+    if (!manifest) return;
+    const nextId = Number(value);
+    setSpeakerId(nextId);
+    // Styles are listed per speaker in the manifest, so keep styleId valid for
+    // the newly selected speaker.
+    const speaker = manifest.speakers.find((s) => s.localId === nextId);
+    if (speaker && !speaker.styles.some((s) => s.localId === styleId)) {
+      setStyleId(speaker.styles[0].localId);
+    }
+  };
 
   const selectedSummary = useMemo<[string, string][]>(
     () =>
@@ -207,7 +231,15 @@ export default function App() {
         provider: result.provider,
         sampleRate: result.sampleRate,
         numStyles: result.numStyles,
+        manifest: result.manifest,
       });
+      // Snap speaker/style onto the manifest so the selects start on valid
+      // entries (the manifest parser guarantees ≥1 speaker with ≥1 style).
+      if (result.manifest) {
+        const speaker = result.manifest.speakers[0];
+        setSpeakerId(speaker.localId);
+        setStyleId(speaker.styles[0].localId);
+      }
       setStatus("loaded with " + result.provider);
       setMetrics([
         "load: " + result.elapsedMs + " ms",
@@ -356,27 +388,61 @@ export default function App() {
                 </Select>
               </div>
               <div className="grid gap-3 sm:grid-cols-3">
-                <NumberField
-                  label="Style ID"
-                  value={styleId}
-                  min={0}
-                  step={1}
-                  onChange={setStyleId}
-                />
-                <NumberField
-                  label="Style weight"
-                  value={styleWeight}
-                  min={0}
-                  step={0.1}
-                  onChange={setStyleWeight}
-                />
-                <NumberField
-                  label="Speaker ID"
-                  value={speakerId}
-                  min={0}
-                  step={1}
-                  onChange={setSpeakerId}
-                />
+                {manifest && manifestSpeaker
+                  ? (
+                    <>
+                      <SelectField
+                        label="Speaker"
+                        value={String(manifestSpeaker.localId)}
+                        options={manifest.speakers.map((speaker) => ({
+                          value: String(speaker.localId),
+                          label: speaker.name + " (" + speaker.localId + ")",
+                        }))}
+                        onChange={selectSpeaker}
+                      />
+                      <SelectField
+                        label="Style"
+                        value={String(styleId)}
+                        options={manifestSpeaker.styles.map((style) => ({
+                          value: String(style.localId),
+                          label: style.name + " (" + style.localId + ")",
+                        }))}
+                        onChange={(value) => setStyleId(Number(value))}
+                      />
+                      <NumberField
+                        label="Style weight"
+                        value={styleWeight}
+                        min={0}
+                        step={0.1}
+                        onChange={setStyleWeight}
+                      />
+                    </>
+                  )
+                  : (
+                    <>
+                      <NumberField
+                        label="Style ID"
+                        value={styleId}
+                        min={0}
+                        step={1}
+                        onChange={setStyleId}
+                      />
+                      <NumberField
+                        label="Style weight"
+                        value={styleWeight}
+                        min={0}
+                        step={0.1}
+                        onChange={setStyleWeight}
+                      />
+                      <NumberField
+                        label="Speaker ID"
+                        value={speakerId}
+                        min={0}
+                        step={1}
+                        onChange={setSpeakerId}
+                      />
+                    </>
+                  )}
               </div>
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
@@ -457,6 +523,17 @@ export default function App() {
             </dl>
           </div>
 
+          {loaded && (
+            manifest
+              ? <ManifestCard manifest={manifest} />
+              : (
+                <div className="rounded-lg border p-4 text-sm text-muted-foreground">
+                  No AIVM manifest in this model — speaker / style stay raw
+                  numeric IDs.
+                </div>
+              )
+          )}
+
           <div className="rounded-lg border p-4">
             <h2 className="text-sm font-semibold">Metrics</h2>
             <div className="mt-3 space-y-2 text-sm">
@@ -493,6 +570,101 @@ const FileField = ({ label, accept, onChange }: FileFieldProps) => (
   <div className="space-y-2">
     <Label>{label}</Label>
     <Input type="file" accept={accept} onChange={onChange} />
+  </div>
+);
+
+type SelectFieldProps = {
+  label: string;
+  value: string;
+  options: { value: string; label: string }[];
+  onChange: (value: string) => void;
+};
+
+const SelectField = ({ label, value, options, onChange }: SelectFieldProps) => (
+  <div className="space-y-2">
+    <Label>{label}</Label>
+    <Select
+      value={value}
+      onValueChange={(next) => {
+        // Base UI emits null on deselection; these selects always hold a value.
+        if (typeof next === "string") onChange(next);
+      }}
+    >
+      <SelectTrigger className="w-full">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((option) => (
+          <SelectItem key={option.value} value={option.value}>
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  </div>
+);
+
+const manifestRows = (manifest: AivmManifest): [string, string][] => {
+  const rows: [string, string][] = [
+    ["architecture", manifest.modelArchitecture],
+    ["format", manifest.modelFormat],
+  ];
+  if (manifest.creators?.length) {
+    rows.push(["creators", manifest.creators.join(", ")]);
+  }
+  if (manifest.trainingEpochs !== undefined) {
+    rows.push(["epochs", String(manifest.trainingEpochs)]);
+  }
+  if (manifest.trainingSteps !== undefined) {
+    rows.push(["steps", String(manifest.trainingSteps)]);
+  }
+  rows.push(["uuid", manifest.uuid]);
+  rows.push(["license", manifest.license ? "included" : "not included"]);
+  return rows;
+};
+
+const ManifestCard = ({ manifest }: { manifest: AivmManifest }) => (
+  <div className="rounded-lg border p-4">
+    <h2 className="text-sm font-semibold">Model</h2>
+    <p className="mt-2 text-sm font-medium">
+      {manifest.name}
+      <span className="ml-2 text-muted-foreground">v{manifest.version}</span>
+    </p>
+    {manifest.description && (
+      <p className="mt-1 break-words text-xs text-muted-foreground">
+        {manifest.description}
+      </p>
+    )}
+    <dl className="mt-3 space-y-2 text-sm">
+      {manifestRows(manifest).map(([name, value]) => (
+        <div key={name} className="grid grid-cols-[96px_1fr] gap-3">
+          <dt className="text-muted-foreground">{name}</dt>
+          <dd className="min-w-0 break-words">{value}</dd>
+        </div>
+      ))}
+    </dl>
+    <div className="mt-3 space-y-2 text-sm">
+      {manifest.speakers.map((speaker) => (
+        <div key={speaker.uuid} className="rounded-md bg-muted px-3 py-2">
+          <p className="font-medium">
+            {speaker.name}
+            <span className="ml-2 text-xs font-normal text-muted-foreground">
+              sid {speaker.localId}
+            </span>
+          </p>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {speaker.styles.map((style) => (
+              <span
+                key={style.localId}
+                className="rounded border px-1.5 py-0.5 text-xs"
+              >
+                {style.name} ({style.localId})
+              </span>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
   </div>
 );
 
