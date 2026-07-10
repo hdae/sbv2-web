@@ -14,6 +14,9 @@ importers:
       '@fontsource-variable/geist':
         specifier: ^5.2.9
         version: 5.2.9
+      '@hdae/fetch-cache':
+        specifier: jsr:^0.1.0
+        version: '@jsr/hdae__fetch-cache@0.1.0'
       '@hdae/yomi':
         specifier: jsr:^0.3.0
         version: '@jsr/hdae__yomi@0.3.0'
@@ -452,6 +455,9 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
+
+  '@jsr/hdae__fetch-cache@0.1.0':
+    resolution: {integrity: sha512-2kYBvU8GnwYUdql1JPBvytKQ2+j6IMD2oCvhwji3GCyJD7+M2UtfWfuZHsnLFbdxSKXDeGFQ8sxP0ky6u7lCJQ==, tarball: https://npm.jsr.io/~/11/@jsr/hdae__fetch-cache/0.1.0.tgz}
 
   '@jsr/hdae__yomi@0.3.0':
     resolution: {integrity: sha512-5jqnIVfJjJ+KiO5OEYiAddAvgqlv6gtx6uWjvseO4LaAEnTvm5/tzLBpxGx/UYfUNrWnynE/H0yprivyYqde2w==, tarball: https://npm.jsr.io/~/11/@jsr/hdae__yomi/0.3.0.tgz}
@@ -2441,6 +2447,8 @@ snapshots:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
+
+  '@jsr/hdae__fetch-cache@0.1.0': {}
 
   '@jsr/hdae__yomi@0.3.0': {}
 

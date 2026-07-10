@@ -20,10 +20,10 @@
         "./src/*"
       ],
       "@hdae/fetch-cache": [
-        "../../../fetch-cache/src/mod.ts"
+        "./node_modules/@hdae/fetch-cache/_dist/src/mod.d.ts"
       ],
       "@hdae/fetch-cache/hf": [
-        "../../../fetch-cache/src/hf/mod.ts"
+        "./node_modules/@hdae/fetch-cache/_dist/src/hf/mod.d.ts"
       ],
       "@hdae/yomi": [
         "./node_modules/@hdae/yomi/_dist/src/mod.d.ts"

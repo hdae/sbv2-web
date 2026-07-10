@@ -1,6 +1,7 @@
 {
   "version": "5",
   "specifiers": {
+    "jsr:@hdae/fetch-cache@0.1": "0.1.0",
     "jsr:@hdae/yomi@0.3": "0.3.0",
     "jsr:@std/assert@1": "1.0.19",
     "jsr:@std/internal@^1.0.12": "1.0.14",
@@ -9,6 +10,9 @@
     "npm:onnxruntime-web@1.27.0": "1.27.0"
   },
   "jsr": {
+    "@hdae/fetch-cache@0.1.0": {
+      "integrity": "1650ff2dab0d8226c4fe072b666bcdbaf6b9c5fc790a14db370c29e804c391c5"
+    },
     "@hdae/yomi@0.3.0": {
       "integrity": "be33df51b92c4dc04d127d8f0b289a71ad06eaba1efa0318300a50afb0e7fb66"
     },
@@ -199,13 +203,6 @@
       "npm:onnxruntime-common@1.27.0",
       "npm:onnxruntime-node@1.27.0",
       "npm:onnxruntime-web@1.27.0"
-    ],
-    "links": {
-      "jsr:@hdae/fetch-cache@0.1.0": {
-        "dependencies": [
-          "jsr:@std/assert@1"
-        ]
-      }
-    }
+    ]
   }
 }

@@ -27,11 +27,13 @@ cold. Keep this to a screenful.
 
 ## Pitfalls index
 
-- **Publish order: fetch-cache BEFORE sbv2-web.** sbv2-web imports
-  `jsr:@hdae/fetch-cache@^0.1.0`; until it exists on JSR, local dev needs
-  `"links": ["../fetch-cache"]` in deno.json (removed for CI — a missing links
-  dir is a hard error). Examples/browser aliases fetch-cache to the sibling
-  repo source; switch to the pnpm jsr dep after publish (TODO in vite.config).
+- **Sibling deps resolve from JSR** (`@hdae/fetch-cache@^0.1.0`,
+  `@hdae/yomi@^0.3.0` — both published). To co-develop unpublished sibling
+  changes, temporarily add `"links": ["../fetch-cache"]` etc. to deno.json,
+  but keep links OUT of commits — a missing links dir is a hard error on CI.
+  Examples/browser maps the library source's bare imports via vite alias (JS)
+  + tsconfig paths (`_dist` d.ts) into `node_modules/@hdae/*` — same pattern
+  for yomi and fetch-cache.
 - **getDeberta pins.** `DEBERTA_REVISION` + `PINNED_FILES` (sizes, model
   sha256) are baked for the default revision only; replacing the HF model
   means updating both (`src/assets/deberta.ts`).
@@ -52,10 +54,9 @@ cold. Keep this to a screenful.
 
 ## Next / resume point
 
-- **Pending user actions:** publish `@hdae/fetch-cache` v0.1.0 (push + GitHub
-  Release), then push sbv2-web (CI resolves the jsr dep) and cut v0.2.0.
-  After publish: switch examples/browser to the pnpm jsr dep (vite TODO), and
-  re-add local `links` only while co-developing.
+- **Pending user actions:** push sbv2-web and cut v0.2.0 (tag + GitHub
+  Release → JSR publish). fetch-cache v0.1.0 and yomi v0.3.0 are published
+  and followed; examples/browser already uses the pnpm jsr deps.
 - Deferred: assist_text (BERT-space emotion reference — needs a second DeBERTa
   pass); pitch/intonation post-processing (needs a WORLD port, quality loss);
   browser offline int64→int32 conversion (validation spike first).
