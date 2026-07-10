@@ -2,7 +2,8 @@
   "version": "5",
   "specifiers": {
     "jsr:@hdae/fetch-cache@0.1": "0.1.0",
-    "jsr:@hdae/yomi@0.3": "0.3.0",
+    "jsr:@hdae/fetch-cache@0.2": "0.2.0",
+    "jsr:@hdae/yomi@0.4": "0.4.0",
     "jsr:@std/assert@1": "1.0.19",
     "jsr:@std/internal@^1.0.12": "1.0.14",
     "npm:onnxruntime-common@1.27.0": "1.27.0",
@@ -13,8 +14,14 @@
     "@hdae/fetch-cache@0.1.0": {
       "integrity": "1650ff2dab0d8226c4fe072b666bcdbaf6b9c5fc790a14db370c29e804c391c5"
     },
-    "@hdae/yomi@0.3.0": {
-      "integrity": "be33df51b92c4dc04d127d8f0b289a71ad06eaba1efa0318300a50afb0e7fb66"
+    "@hdae/fetch-cache@0.2.0": {
+      "integrity": "5a399cdf60f046067bd9592237cf7756e3ed4b8b790fd675d604ea6b8dd0b665"
+    },
+    "@hdae/yomi@0.4.0": {
+      "integrity": "7801adf7d50bd0f57b3818261800b30fe7abffd5c3594868d8af31cbb89cc3d8",
+      "dependencies": [
+        "jsr:@hdae/fetch-cache@0.1"
+      ]
     },
     "@std/assert@1.0.19": {
       "integrity": "eaada96ee120cb980bc47e040f82814d786fe8162ecc53c91d8df60b8755991e",
@@ -197,8 +204,8 @@
   },
   "workspace": {
     "dependencies": [
-      "jsr:@hdae/fetch-cache@0.1",
-      "jsr:@hdae/yomi@0.3",
+      "jsr:@hdae/fetch-cache@0.2",
+      "jsr:@hdae/yomi@0.4",
       "jsr:@std/assert@1",
       "npm:onnxruntime-common@1.27.0",
       "npm:onnxruntime-node@1.27.0",

@@ -28,8 +28,8 @@
       "@hdae/yomi": [
         "./node_modules/@hdae/yomi/_dist/src/mod.d.ts"
       ],
-      "@hdae/yomi/browser": [
-        "./node_modules/@hdae/yomi/_dist/src/browser/mod.d.ts"
+      "@hdae/yomi/loader": [
+        "./node_modules/@hdae/yomi/_dist/src/loader/mod.d.ts"
       ],
       "onnxruntime-common": [
         "./node_modules/onnxruntime-common"

@@ -1,6 +1,7 @@
 // toSbv2PhoneTone の挙動仕様。純関数テストは FrontendResult を手組みして検証（辞書不要）。
-// 建材（moraToPhones / moraTones / pausePunct）は @hdae/yomi 由来だが、ここでは
-// SBV2 固有の梱包（両端 PAD・トーン割当・句読点挿入）の結果を固定する。
+// 建材（moraToPhones / moraTones）と実在記号（punctuations / leadingPunctuations）は
+// @hdae/yomi 由来だが、ここでは SBV2 固有の梱包（両端 PAD・トーン割当・実在記号の音素化）の
+// 結果を固定する。
 
 import type { AccentPhrase, FrontendResult, Mora } from "@hdae/yomi";
 import { toSbv2PhoneTone } from "./phone_tone.ts";
@@ -22,12 +23,16 @@ const m = (kana: string, consonant: string | undefined, vowel: string): Mora =>
 const phrase = (
   moras: Mora[],
   accentNucleus: number,
-  pauseAfter: AccentPhrase["pauseAfter"] = "none",
-): AccentPhrase => ({ moras, accentNucleus, pauseAfter });
+  punctuations: string[] = [],
+): AccentPhrase => ({ moras, accentNucleus, pauseAfter: "none", punctuations });
 
-const result = (accentPhrases: AccentPhrase[]): FrontendResult => ({
+const result = (
+  accentPhrases: AccentPhrase[],
+  leadingPunctuations: string[] = [],
+): FrontendResult => ({
   normalizedText: "",
   accentPhrases,
+  leadingPunctuations,
 });
 
 Deno.test("phone_tone: 全体構造", async (t) => {
@@ -48,8 +53,8 @@ Deno.test("phone_tone: 全体構造", async (t) => {
 
   await t.step("phones と tones は常に同じ長さ", () => {
     const r = result([
-      phrase([m("ア", undefined, "a"), m("キ", "k", "i")], 2, "short"),
-      phrase([m("ト", "t", "o")], 1, "long"),
+      phrase([m("ア", undefined, "a"), m("キ", "k", "i")], 2, [","]),
+      phrase([m("ト", "t", "o")], 1, ["."]),
     ]);
     const { phones, tones } = toSbv2PhoneTone(r);
     assert(
@@ -155,41 +160,66 @@ Deno.test("phone_tone: 核位置→トーン(0/1)", async (t) => {
   });
 });
 
-Deno.test("phone_tone: pauseAfter → punctuation", async (t) => {
-  const withPause = (pause: AccentPhrase["pauseAfter"]) =>
-    toSbv2PhoneTone(result([phrase([m("カ", "k", "a")], 0, pause)])).phones;
-
-  await t.step("short → 句直後に ','(tone 0)", () => {
+Deno.test("phone_tone: 実在記号（punctuations）の梱包", async (t) => {
+  await t.step("句直後の実在記号は tone 0 で出る（正規形・出現順）", () => {
     const { phones, tones } = toSbv2PhoneTone(
-      result([phrase([m("カ", "k", "a")], 0, "short")]),
+      result([phrase([m("カ", "k", "a")], 0, [","])]),
     );
-    assertEq(phones, ["_", "k", "a", ",", "_"], "short=読点");
+    assertEq(phones, ["_", "k", "a", ",", "_"], "実在読点");
     assertEq(tones, [0, 0, 0, 0, 0], "punctuation は tone 0");
   });
 
-  await t.step("long → 句直後に '.'（文末でも出る）", () => {
+  await t.step("連続記号（！？等）は全て順に出る", () => {
+    const { phones, tones } = toSbv2PhoneTone(
+      result([phrase([m("カ", "k", "a")], 0, ["!", "?"])]),
+    );
+    assertEq(phones, ["_", "k", "a", "!", "?", "_"], "連続記号");
+    assertEq(tones, [0, 0, 0, 0, 0, 0], "記号は全て tone 0");
+  });
+
+  await t.step("実在しない記号は合成しない（文末 '.' も出ない）", () => {
+    // pauseAfter は "long"（yomi の文末強制）でも punctuations が空なら記号は出ない。
+    const r: FrontendResult = {
+      normalizedText: "",
+      accentPhrases: [{
+        moras: [m("カ", "k", "a")],
+        accentNucleus: 0,
+        pauseAfter: "long",
+        punctuations: [],
+      }],
+      leadingPunctuations: [],
+    };
     assertEq(
-      withPause("long"),
-      ["_", "k", "a", ".", "_"],
-      "long=句点。末尾 '.' '_'",
+      toSbv2PhoneTone(r).phones,
+      ["_", "k", "a", "_"],
+      "記号なしの句境界は tone の0戻りのみで表す",
     );
   });
 
-  await t.step("none → 記号を挿入しない", () => {
-    assertEq(
-      withPause("none"),
-      ["_", "k", "a", "_"],
-      "none は句境界を tone の0戻りのみで表す",
-    );
+  await t.step(
+    "先頭句より前の記号（leadingPunctuations）は先頭 PAD 直後に出る",
+    () => {
+      const { phones, tones } = toSbv2PhoneTone(
+        result([phrase([m("カ", "k", "a")], 0)], ["…"]),
+      );
+      assertEq(phones, ["_", "…", "k", "a", "_"], "leading 記号");
+      assertEq(tones, [0, 0, 0, 0, 0], "leading 記号は tone 0");
+    },
+  );
+
+  await t.step("記号だけの入力は PAD + 記号列になる（句は無い）", () => {
+    const { phones, tones } = toSbv2PhoneTone(result([], ["!", "?"]));
+    assertEq(phones, ["_", "!", "?", "_"], "記号のみ入力");
+    assertEq(tones, [0, 0, 0, 0], "tones");
   });
 });
 
 Deno.test("phone_tone: 複数句", async (t) => {
   await t.step("句をまたぐとトーンは各句で独立に0から立ち上がる", () => {
-    // 句1: ア(平板, tone 0,1) → short ',' → 句2: イ(頭高, tone 1,0)
+    // 句1: アイ(平板, tone 0,1) → 実在 ',' → 句2: ウエ(頭高, tone 1,0) → 実在 '.'
     const r = result([
-      phrase([m("ア", undefined, "a"), m("イ", undefined, "i")], 0, "short"),
-      phrase([m("ウ", undefined, "u"), m("エ", undefined, "e")], 1, "long"),
+      phrase([m("ア", undefined, "a"), m("イ", undefined, "i")], 0, [","]),
+      phrase([m("ウ", undefined, "u"), m("エ", undefined, "e")], 1, ["."]),
     ]);
     const { phones, tones } = toSbv2PhoneTone(r);
     assertEq(phones, ["_", "a", "i", ",", "u", "e", ".", "_"], "phones");

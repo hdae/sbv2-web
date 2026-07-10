@@ -47,8 +47,9 @@ export const distributePhone = (nPhone: number, nWord: number): number[] => {
  *  - word2ph.length === Σ tokenize(surface).length + 2   （bert_feature.py の len(text)+2 に対応。
  *      ただし text は SBV2 の sep_text 連結 = 語 surface 連結。char トークナイザは加算的なので
  *      Σ tokenize(word) == tokenize(joined) が成り立つ。norm_text 全体の直接トークナイズではない
- *      点に注意 — 我々のフロントは記号/一般（"！" 等）を given_phone に出さないため、
- *      normalizedText の直接トークナイズとは長さがずれる。詳細は docs/aivmx-interface.md 参照）。
+ *      点に注意 — 正規形句読点（! ? … , . ' -）に写る記号は語要素として given_phone に出るが、
+ *      写像外の記号（括弧・空白等）は語に出ないため、normalizedText の直接トークナイズとは
+ *      長さがずれ得る。詳細は docs/aivmx-interface.md 参照）。
  *  - sum(word2ph) === givenPhoneLen                       （g2p.py の len(phones)==sum(word2ph)）。
  */
 export const buildBaseWord2ph = (

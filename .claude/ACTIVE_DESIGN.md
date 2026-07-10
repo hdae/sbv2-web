@@ -27,10 +27,13 @@ cold. Keep this to a screenful.
 
 ## Pitfalls index
 
-- **Sibling deps resolve from JSR** (`@hdae/fetch-cache@^0.1.0`,
-  `@hdae/yomi@^0.3.0` — both published). To co-develop unpublished sibling
+- **Sibling deps resolve from JSR** (`@hdae/fetch-cache@^0.2.0`,
+  `@hdae/yomi@^0.4.0` — both published). To co-develop unpublished sibling
   changes, temporarily add `"links": ["../fetch-cache"]` etc. to deno.json,
   but keep links OUT of commits — a missing links dir is a hard error on CI.
+- **`toSbv2PhoneTone` MUST mirror yomi's `wordPhoneAlignment` order**
+  (leadingPunctuations + per-phrase moras + punctuations); any divergence
+  breaks `sum(word2ph) === phones.length` and synthesis throws.
   Examples/browser maps the library source's bare imports via vite alias (JS)
   + tsconfig paths (`_dist` d.ts) into `node_modules/@hdae/*` — same pattern
   for yomi and fetch-cache.
@@ -54,10 +57,17 @@ cold. Keep this to a screenful.
 
 ## Next / resume point
 
-- **v0.2.0 is released on JSR (2026-07-10)**, with fetch-cache v0.1.0 and
-  yomi v0.3.0 published and followed. Nothing is pending in this repo; the
-  0.2.0 batch is closed. Next external step: hand
-  [docs/migration-0.2.md](../docs/migration-0.2.md) to the light-sbv2 agent.
+- **v0.3.0 prepared (2026-07-10, tag/Release by owner)** — the yomi v0.4.0
+  follow-up: `toSbv2PhoneTone` now packs REAL punctuation
+  (`leadingPunctuations` + per-phrase `punctuations`, canonical `! ? … , . ' -`)
+  instead of synthesizing `,`/`.` from pause classes (`pausePunct` was deleted
+  upstream); question marks now reach the model = better sentence-final
+  intonation. Examples import `@hdae/yomi/loader` (was `./browser`). Dep floors:
+  yomi `^0.4.0`, fetch-cache `^0.2.0`. See
+  [docs/migration-0.3.md](../docs/migration-0.3.md).
+- **v0.2.0 released on JSR (2026-07-10)** with fetch-cache v0.1.0 and yomi
+  v0.3.0; that batch is closed
+  ([docs/migration-0.2.md](../docs/migration-0.2.md) went to light-sbv2).
 - Deferred: assist_text (BERT-space emotion reference — needs a second DeBERTa
   pass); pitch/intonation post-processing (needs a WORLD port, quality loss);
   browser offline int64→int32 conversion (validation spike first).

@@ -23,7 +23,7 @@ import {
   synthesizeText,
 } from "../../src/node/mod.ts";
 import { JtdDictionary } from "@hdae/yomi";
-import { getDictionary } from "@hdae/yomi/browser";
+import { getDictionary } from "@hdae/yomi/loader";
 
 const parseArgs = () => {
   const args = new Map<string, string>();

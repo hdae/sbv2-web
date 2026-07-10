@@ -27,10 +27,10 @@ export default defineConfig({
         ),
       },
       {
-        find: "@hdae/yomi/browser",
+        find: "@hdae/yomi/loader",
         replacement: resolve(
           __dirname,
-          "node_modules/@hdae/yomi/src/browser/mod.js",
+          "node_modules/@hdae/yomi/src/loader/mod.js",
         ),
       },
       {

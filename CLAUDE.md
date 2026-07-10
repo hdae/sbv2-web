@@ -66,14 +66,17 @@ via `@hdae/fetch-cache`; the dictionary comes from yomi's `getDictionary()`. See
   licensing.
 - [docs/migration-0.2.md](docs/migration-0.2.md) — 0.1.0 → 0.2.0 API migration
   guide.
+- [docs/migration-0.3.md](docs/migration-0.3.md) — 0.2.0 → 0.3.0 migration
+  (real punctuation in given_phone; yomi ^0.4.0 / fetch-cache ^0.2.0).
 - [.claude/ACTIVE_DESIGN.md](.claude/ACTIVE_DESIGN.md) — current design focus
   and a pitfalls index. Read it before reviewing or planning.
 
 ## Conventions
 
-- **Fail loudly.** No silent coercion of broken/old data. This project is
-  unreleased, so no migrations or backward-compat shims — breaking changes are
-  fine.
+- **Fail loudly.** No silent coercion of broken/old data. **Released since
+  0.2.0 (JSR)** — breaking changes now need a migration note
+  (`docs/migration-<ver>.md`) and a deliberate version bump; do not break the
+  published API casually.
 - Ship tests in the same commit as the change. `src/` numeric paths are faithful
   ports of `tools/model-tools/scripts/synth_aivmx.py`; keep that parity.
 - Keep inline comments about "why". Larger rationale goes to an ADR or a design

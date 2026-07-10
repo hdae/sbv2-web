@@ -3,7 +3,7 @@ import {
   JtdDictionary,
   type JtdDictionary as LoadedDictionary,
 } from "@hdae/yomi";
-import { getDictionary } from "@hdae/yomi/browser";
+import { getDictionary } from "@hdae/yomi/loader";
 import {
   type AivmManifest,
   buildDebertaTokenizer,
