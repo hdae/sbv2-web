@@ -27,8 +27,9 @@ cold. Keep this to a screenful.
 
 ## Pitfalls index
 
-- **Sibling deps resolve from JSR** (`@hdae/fetch-cache@^0.2.0`,
-  `@hdae/yomi@^0.4.0` — both published). To co-develop unpublished sibling
+- **Sibling deps resolve from JSR** (`@hdae/fetch-cache@^0.3.0`,
+  `@hdae/yomi@^0.4.0` — both published; the resolver picks yomi 0.4.1+ once
+  released, converging fetch-cache to a single 0.3.x). To co-develop unpublished sibling
   changes, temporarily add `"links": ["../fetch-cache"]` etc. to deno.json,
   but keep links OUT of commits — a missing links dir is a hard error on CI.
 - **`toSbv2PhoneTone` MUST mirror yomi's `wordPhoneAlignment` order**

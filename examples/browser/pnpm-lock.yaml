@@ -15,8 +15,8 @@ importers:
         specifier: ^5.2.9
         version: 5.2.9
       '@hdae/fetch-cache':
-        specifier: jsr:^0.2.0
-        version: '@jsr/hdae__fetch-cache@0.2.0'
+        specifier: jsr:^0.3.0
+        version: '@jsr/hdae__fetch-cache@0.3.0'
       '@hdae/yomi':
         specifier: jsr:^0.4.0
         version: '@jsr/hdae__yomi@0.4.0'
@@ -459,8 +459,8 @@ packages:
   '@jsr/hdae__fetch-cache@0.1.0':
     resolution: {integrity: sha512-2kYBvU8GnwYUdql1JPBvytKQ2+j6IMD2oCvhwji3GCyJD7+M2UtfWfuZHsnLFbdxSKXDeGFQ8sxP0ky6u7lCJQ==, tarball: https://npm.jsr.io/~/11/@jsr/hdae__fetch-cache/0.1.0.tgz}
 
-  '@jsr/hdae__fetch-cache@0.2.0':
-    resolution: {integrity: sha512-l8fzlYgeey8l3MOXVVJ5fPErktJgpMZP+SikAfo1qzjO3hxqRpZyUGJGYtU6crFurtb/Ae7aye8vluBEUSHITg==, tarball: https://npm.jsr.io/~/11/@jsr/hdae__fetch-cache/0.2.0.tgz}
+  '@jsr/hdae__fetch-cache@0.3.0':
+    resolution: {integrity: sha512-HkvyET+eLEuos9gDONDCoWjYaLK1c/17RODs5Qa5xxGH8abFf8t8OCwlzQkysKv7rTqLW/3O6HgbLudlmeQVNQ==, tarball: https://npm.jsr.io/~/11/@jsr/hdae__fetch-cache/0.3.0.tgz}
 
   '@jsr/hdae__yomi@0.4.0':
     resolution: {integrity: sha512-Iwnb0tYZ4nIVQb4Qll+JRUxzZcb1JPvRxhFO0VpEXBW5gyqOab+Rdr5PZhSQm0L+YanXhdQueUt/2BkmHSfYyw==, tarball: https://npm.jsr.io/~/11/@jsr/hdae__yomi/0.4.0.tgz}
@@ -2453,7 +2453,7 @@ snapshots:
 
   '@jsr/hdae__fetch-cache@0.1.0': {}
 
-  '@jsr/hdae__fetch-cache@0.2.0': {}
+  '@jsr/hdae__fetch-cache@0.3.0': {}
 
   '@jsr/hdae__yomi@0.4.0':
     dependencies:

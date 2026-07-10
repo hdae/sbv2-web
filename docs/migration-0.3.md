@@ -20,8 +20,8 @@
   `AccentPhrase.punctuations` が必須（`pausePunct` は yomi 側で削除済み）。
   `FrontendResult` を手組みして `toSbv2PhoneTone` に渡している場合は両フィールドの
   追加が必要。
-- `@hdae/fetch-cache@^0.2.0` — API 変更なし（yomi 0.4.1 と同一版に収束させるための
-  floor 引き上げのみ）。
+- `@hdae/fetch-cache@^0.3.0` — API 変更なし（single-flight 入りの公開版へ floor を
+  引き上げ、yomi 0.4.1 と同一版に収束させる）。
 
 ## import パスの変更（yomi 側の破壊的変更の伝搬）
 
