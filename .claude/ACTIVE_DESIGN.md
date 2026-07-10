@@ -54,9 +54,10 @@ cold. Keep this to a screenful.
 
 ## Next / resume point
 
-- **Pending user actions:** push sbv2-web and cut v0.2.0 (tag + GitHub
-  Release → JSR publish). fetch-cache v0.1.0 and yomi v0.3.0 are published
-  and followed; examples/browser already uses the pnpm jsr deps.
+- **v0.2.0 is released on JSR (2026-07-10)**, with fetch-cache v0.1.0 and
+  yomi v0.3.0 published and followed. Nothing is pending in this repo; the
+  0.2.0 batch is closed. Next external step: hand
+  [docs/migration-0.2.md](../docs/migration-0.2.md) to the light-sbv2 agent.
 - Deferred: assist_text (BERT-space emotion reference — needs a second DeBERTa
   pass); pitch/intonation post-processing (needs a WORLD port, quality loss);
   browser offline int64→int32 conversion (validation spike first).
