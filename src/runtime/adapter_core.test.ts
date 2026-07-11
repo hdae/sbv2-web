@@ -1,7 +1,8 @@
 // Sbv2Adapter のライフサイクル・feed 組み立て挙動（モック OrtBackend・onnxruntime 非依存）。
 //
 // static ファクトリの部分初期化失敗でセッションが宙に浮かないこと、per-call scalars の
-// 合成、release 契約（冪等・in-flight 待機・release 後 throw, docs/decisions/0004）を固定する。
+// 合成、release 契約（冪等・in-flight 待機・release 後 throw, docs/decisions/0004）、
+// 共有 DebertaExtractor の所有権契約（アダプタは解放しない, docs/decisions/0005）を固定する。
 
 import {
   assertEquals,
@@ -10,6 +11,7 @@ import {
   assertThrows,
 } from "@std/assert";
 import { Sbv2Adapter } from "./adapter_core.ts";
+import { DebertaExtractor } from "./deberta_extractor.ts";
 import type { SynthInput } from "./adapter_types.ts";
 import {
   asMockTensor,
@@ -193,4 +195,106 @@ Deno.test("release 後の synthesize / buildAcousticFeeds は同期 throw", asyn
   await adapter.release();
   assertThrows(() => adapter.synthesize(INPUT), Error, "release() 後");
   assertThrows(() => adapter.buildAcousticFeeds(INPUT), Error, "release() 後");
+});
+
+// ---- 共有 DebertaExtractor（docs/decisions/0005） ----
+
+const makeExtractor = async (bert: MockSession): Promise<DebertaExtractor> => {
+  const { backend } = createMockBackend([() => bert]);
+  return await DebertaExtractor.create(backend, {
+    bertOnnxBytes: new Uint8Array(),
+    tokenizer: TOKENIZER,
+  });
+};
+
+/** 共有 deberta でアダプタを作る（backend は acoustic 1 本だけを供給する）。 */
+const makeSharedAdapter = (
+  acoustic: MockSession,
+  extractor: DebertaExtractor,
+): Promise<Sbv2Adapter> => {
+  const { backend } = createMockBackend([() => acoustic]);
+  return Sbv2Adapter.fromOnnx(backend, {
+    acousticOnnxBytes: new Uint8Array(),
+    styleVectorsNpy: buildStyleNpy(2),
+    sampleRate: 44100,
+    deberta: extractor,
+  });
+};
+
+Deno.test("共有 deberta: 2 アダプタが 1 本の BERT セッションを使い、アダプタ release で解放されない", async () => {
+  const bert = bertSession();
+  const extractor = await makeExtractor(bert);
+  const acousticA = acousticSession();
+  const acousticB = acousticSession();
+  const adapterA = await makeSharedAdapter(acousticA, extractor);
+  const adapterB = await makeSharedAdapter(acousticB, extractor);
+
+  await adapterA.synthesize(INPUT);
+  await adapterB.synthesize(INPUT);
+  // 両アダプタの BERT 推論が同一セッションへ流れている（複製されていない）。
+  assertEquals(bert.runFeeds.length, 2);
+
+  await adapterA.release();
+  await adapterB.release();
+  assertEquals(acousticA.released, 1);
+  assertEquals(acousticB.released, 1);
+  // 共有 BERT はアダプタが解放しない（所有権は生成者）。
+  assertEquals(bert.released, 0);
+  await extractor.release();
+  assertEquals(bert.released, 1);
+});
+
+Deno.test("fromOnnx: release 済みの deberta は拒否（セッション未生成のまま throw）", async () => {
+  const extractor = await makeExtractor(bertSession());
+  await extractor.release();
+  const { backend, sessions } = createMockBackend([]);
+  await assertRejects(
+    () =>
+      Sbv2Adapter.fromOnnx(backend, {
+        acousticOnnxBytes: new Uint8Array(),
+        styleVectorsNpy: buildStyleNpy(2),
+        sampleRate: 44100,
+        deberta: extractor,
+      }),
+    Error,
+    "release() 済み",
+  );
+  assertEquals(sessions.length, 0);
+});
+
+Deno.test("fromOnnx: deberta と bertOnnxBytes/tokenizer の同時指定は throw", async () => {
+  const extractor = await makeExtractor(bertSession());
+  const { backend, sessions } = createMockBackend([]);
+  // 型で防いでいる誤用を JS 呼び出し相当で検証する（テスト境界の限定 cast）。
+  const conflicting = {
+    acousticOnnxBytes: new Uint8Array(),
+    styleVectorsNpy: buildStyleNpy(2),
+    sampleRate: 44100,
+    bertOnnxBytes: new Uint8Array(),
+    tokenizer: TOKENIZER,
+    deberta: extractor,
+  } as unknown as Parameters<typeof Sbv2Adapter.fromOnnx>[1];
+  await assertRejects(
+    () => Sbv2Adapter.fromOnnx(backend, conflicting),
+    Error,
+    "同時指定できない",
+  );
+  assertEquals(sessions.length, 0);
+  await extractor.release();
+});
+
+Deno.test("fromOnnx: BERT 供給なし（bytes も deberta も無い）は throw", async () => {
+  const { backend, sessions } = createMockBackend([]);
+  // 型で防いでいる誤用を JS 呼び出し相当で検証する（テスト境界の限定 cast）。
+  const missing = {
+    acousticOnnxBytes: new Uint8Array(),
+    styleVectorsNpy: buildStyleNpy(2),
+    sampleRate: 44100,
+  } as unknown as Parameters<typeof Sbv2Adapter.fromOnnx>[1];
+  await assertRejects(
+    () => Sbv2Adapter.fromOnnx(backend, missing),
+    Error,
+    "BERT の供給が必要",
+  );
+  assertEquals(sessions.length, 0);
 });

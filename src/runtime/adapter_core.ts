@@ -10,18 +10,17 @@
 
 import type { InferenceSession, Tensor } from "onnxruntime-common";
 import type { DebertaTokenizer } from "../text/deberta_tokenizer.ts";
+import { type BertSource, DebertaExtractor } from "./deberta_extractor.ts";
 import {
   type AivmxMetadata,
   readAivmxMetadata,
   type Sbv2HyperParameters,
 } from "./aivmx_meta.ts";
 import {
-  addBlankWord2ph,
   BERT_DIM,
   parseStyleMatrix,
   phonesTonesToModelIds,
   styleVector,
-  tileBertToPhoneLevel,
 } from "./tensor_build.ts";
 import {
   type AcousticFeeds,
@@ -53,9 +52,49 @@ export type OrtBackend = {
 
 type StyleMatrix = { rows: number; cols: number; data: Float32Array };
 
+/** BertSource の解決結果（所有 or 共有）。 */
+type ResolvedBertSource =
+  | { kind: "own"; bertOnnxBytes: Uint8Array; tokenizer: DebertaTokenizer }
+  | { kind: "shared"; deberta: DebertaExtractor };
+
+/**
+ * BertSource を検証して所有/共有に解決する。型を欺く JS 呼び出し（両方 or どちらも
+ * 指定なし）にも fail loud する — セッションの所有者が曖昧なまま生成しない。
+ */
+const resolveBertSource = (args: BertSource): ResolvedBertSource => {
+  if (args.deberta !== undefined) {
+    if (args.bertOnnxBytes !== undefined || args.tokenizer !== undefined) {
+      throw new Error(
+        "Sbv2Adapter: deberta と bertOnnxBytes/tokenizer は同時指定できない" +
+          "（BERT セッションの所有者が曖昧になる）",
+      );
+    }
+    if (args.deberta.isReleased) {
+      throw new Error(
+        "Sbv2Adapter: release() 済みの DebertaExtractor は使えない",
+      );
+    }
+    return { kind: "shared", deberta: args.deberta };
+  }
+  if (args.bertOnnxBytes === undefined || args.tokenizer === undefined) {
+    throw new Error(
+      "Sbv2Adapter: BERT の供給が必要（bertOnnxBytes + tokenizer、または生成済みの deberta）",
+    );
+  }
+  return {
+    kind: "own",
+    bertOnnxBytes: args.bertOnnxBytes,
+    tokenizer: args.tokenizer,
+  };
+};
+
 /**
  * SBV2 JP-Extra 用モデルアダプタのコア実装。aivmx 音響モデル + 実 DeBERTa を、注入された
  * OrtBackend で駆動する。web/node のラッパはセッション生成オプション（EP/デバイス）だけを与える。
+ *
+ * DeBERTa は BertSource で供給する: bytes を渡せばアダプタが専用セッションを所有し、
+ * 生成済みの DebertaExtractor を渡せば複数アダプタで 1 セッションを共有できる
+ * （docs/decisions/0005 — 共有時の解放責任は生成者）。
  */
 export class Sbv2Adapter implements ModelAdapter {
   readonly needsBert = true;
@@ -84,9 +123,9 @@ export class Sbv2Adapter implements ModelAdapter {
   readonly #backend: OrtBackend;
   readonly #acoustic: InferenceSession;
   readonly #acousticInputNames: readonly string[];
-  readonly #bert: InferenceSession;
-  readonly #bertInputNames: readonly string[];
-  readonly #tokenizer: DebertaTokenizer;
+  readonly #deberta: DebertaExtractor;
+  /** true = 専用生成（release で一緒に解放）。false = 共有（生成者が解放する）。 */
+  readonly #ownsDeberta: boolean;
   readonly #styleMatrix: StyleMatrix;
   readonly #scalars: SynthScalars;
   readonly #hyperParameters?: Sbv2HyperParameters;
@@ -98,8 +137,8 @@ export class Sbv2Adapter implements ModelAdapter {
   private constructor(args: {
     backend: OrtBackend;
     acoustic: InferenceSession;
-    bert: InferenceSession;
-    tokenizer: DebertaTokenizer;
+    deberta: DebertaExtractor;
+    ownsDeberta: boolean;
     styleMatrix: StyleMatrix;
     sampleRate: number;
     scalars: SynthScalars;
@@ -108,9 +147,8 @@ export class Sbv2Adapter implements ModelAdapter {
     this.#backend = args.backend;
     this.#acoustic = args.acoustic;
     this.#acousticInputNames = args.acoustic.inputNames;
-    this.#bert = args.bert;
-    this.#bertInputNames = args.bert.inputNames;
-    this.#tokenizer = args.tokenizer;
+    this.#deberta = args.deberta;
+    this.#ownsDeberta = args.ownsDeberta;
     this.#styleMatrix = args.styleMatrix;
     this.sampleRate = args.sampleRate;
     this.#scalars = args.scalars;
@@ -121,41 +159,50 @@ export class Sbv2Adapter implements ModelAdapter {
    * Build from a plain acoustic ONNX file plus separate style vectors.
    * sampleRate は必須（黙って 44100 に落とすと別レートのモデルで音程の狂った音声が
    * 無言で出る）。hyperParameters は任意で、渡すと numSpeakers/spk2id 等のアクセサが生きる。
+   * 共有 deberta を渡したとき、sessionOptions が効くのは音響セッションだけ
+   * （BERT 側は抽出器の生成時オプションのまま）。
    */
-  static async fromOnnx(backend: OrtBackend, args: {
-    acousticOnnxBytes: Uint8Array;
-    bertOnnxBytes: Uint8Array;
-    tokenizer: DebertaTokenizer;
-    styleVectorsNpy: Uint8Array;
-    sampleRate: number;
-    scalars?: SynthScalars;
-    hyperParameters?: Sbv2HyperParameters;
-    sessionOptions?: OrtSessionOptions;
-  }): Promise<Sbv2Adapter> {
+  static async fromOnnx(
+    backend: OrtBackend,
+    args: {
+      acousticOnnxBytes: Uint8Array;
+      styleVectorsNpy: Uint8Array;
+      sampleRate: number;
+      scalars?: SynthScalars;
+      hyperParameters?: Sbv2HyperParameters;
+      sessionOptions?: OrtSessionOptions;
+    } & BertSource,
+  ): Promise<Sbv2Adapter> {
     // 純検証を先に済ませる（ここで落ちればセッション未生成のまま fail loud できる）。
+    const bertSource = resolveBertSource(args);
     const styleMatrix = parseStyleMatrix(args.styleVectorsNpy);
     const acoustic = await backend.createSession(
       args.acousticOnnxBytes,
       args.sessionOptions,
     );
-    let bert: InferenceSession;
-    try {
-      bert = await backend.createSession(
-        args.bertOnnxBytes,
-        args.sessionOptions,
-      );
-    } catch (error) {
-      // static ファクトリはインスタンスを返す前に throw すると呼び出し側が acoustic を
-      // 解放できない（ハンドルが無い）。生成済みセッションを解放してから投げ直す。
-      // 解放自体の失敗は元エラーを隠さないよう握りつぶす（エラー経路の後始末に限る）。
-      await acoustic.release().catch(() => {});
-      throw error;
+    let deberta: DebertaExtractor;
+    if (bertSource.kind === "own") {
+      try {
+        deberta = await DebertaExtractor.create(backend, {
+          bertOnnxBytes: bertSource.bertOnnxBytes,
+          tokenizer: bertSource.tokenizer,
+          sessionOptions: args.sessionOptions,
+        });
+      } catch (error) {
+        // static ファクトリはインスタンスを返す前に throw すると呼び出し側が acoustic を
+        // 解放できない（ハンドルが無い）。生成済みセッションを解放してから投げ直す。
+        // 解放自体の失敗は元エラーを隠さないよう握りつぶす（エラー経路の後始末に限る）。
+        await acoustic.release().catch(() => {});
+        throw error;
+      }
+    } else {
+      deberta = bertSource.deberta;
     }
     return new Sbv2Adapter({
       backend,
       acoustic,
-      bert,
-      tokenizer: args.tokenizer,
+      deberta,
+      ownsDeberta: bertSource.kind === "own",
       styleMatrix,
       sampleRate: args.sampleRate,
       // mergeScalars で既定値へ重ねつつ非有限値を弾く（コンストラクタ時点で検証済みにする）。
@@ -169,15 +216,16 @@ export class Sbv2Adapter implements ModelAdapter {
    * metadata に readAivmxMetadata 済みの値を渡すと巨大 protobuf の再走査を省ける
    * （レジストリ等で一度パースしている場合の最適化）。
    */
-  static async fromAivmx(backend: OrtBackend, args: {
-    aivmxBytes: Uint8Array;
-    bertOnnxBytes: Uint8Array;
-    tokenizer: DebertaTokenizer;
-    metadata?: AivmxMetadata;
-    sampleRate?: number;
-    scalars?: SynthScalars;
-    sessionOptions?: OrtSessionOptions;
-  }): Promise<Sbv2Adapter> {
+  static async fromAivmx(
+    backend: OrtBackend,
+    args: {
+      aivmxBytes: Uint8Array;
+      metadata?: AivmxMetadata;
+      sampleRate?: number;
+      scalars?: SynthScalars;
+      sessionOptions?: OrtSessionOptions;
+    } & BertSource,
+  ): Promise<Sbv2Adapter> {
     const metadata = args.metadata ?? readAivmxMetadata(args.aivmxBytes);
     const sampleRate = args.sampleRate ??
       metadata.hyperParameters?.samplingRate;
@@ -189,71 +237,17 @@ export class Sbv2Adapter implements ModelAdapter {
     }
     return await Sbv2Adapter.fromOnnx(backend, {
       acousticOnnxBytes: args.aivmxBytes,
-      bertOnnxBytes: args.bertOnnxBytes,
-      tokenizer: args.tokenizer,
       styleVectorsNpy: metadata.styleVectorsNpy,
       sampleRate,
       scalars: args.scalars,
       hyperParameters: metadata.hyperParameters,
       sessionOptions: args.sessionOptions,
+      // BertSource は判別を保ったまま素通しする（検証は fromOnnx 側の一箇所で行う）。
+      ...(args.deberta !== undefined ? { deberta: args.deberta } : {
+        bertOnnxBytes: args.bertOnnxBytes,
+        tokenizer: args.tokenizer,
+      }),
     });
-  }
-
-  /** DeBERTa を走らせ bert 特徴量 [1024*T] を作る（add_blank 後 word2ph で tile 展開・転置）。 */
-  async #extractBert(
-    bertText: string,
-    baseWord2ph: readonly number[],
-    seqLen: number,
-  ): Promise<Float32Array> {
-    const word2ph = addBlankWord2ph(baseWord2ph);
-    const inputIds = this.#tokenizer.encode(bertText); // [CLS] + 文字 + [SEP]
-    const tokenLen = inputIds.length;
-    const idsTensor = this.#backend.int64(
-      BigInt64Array.from(inputIds, BigInt),
-      [1, tokenLen],
-    );
-    const attnTensor = this.#backend.int64(
-      BigInt64Array.from(new Array(tokenLen).fill(1), BigInt),
-      [1, tokenLen],
-    );
-    const feed: Record<string, Tensor> = {};
-    for (const name of this.#bertInputNames) {
-      if (name === "input_ids") feed[name] = idsTensor;
-      else if (name === "attention_mask") feed[name] = attnTensor;
-      else {
-        throw new Error(
-          `Sbv2Adapter: DeBERTa の想定外入力 '${name}'（input_ids/attention_mask のみ対応）`,
-        );
-      }
-    }
-    const out = await this.#bert.run(feed, [OUTPUT_NAME]);
-    const hiddenTensor = out[OUTPUT_NAME];
-    const dims = hiddenTensor.dims;
-    if (dims.length !== 2 || dims[1] !== BERT_DIM) {
-      throw new Error(
-        `Sbv2Adapter: DeBERTa 出力 shape が想定外 [${
-          dims.join(",")
-        }]（[seq_len, 1024] を期待）`,
-      );
-    }
-    const hidden = hiddenTensor.data as Float32Array;
-    if (dims[0] !== word2ph.length) {
-      throw new Error(
-        `Sbv2Adapter: DeBERTa トークン数 ${
-          dims[0]
-        } != word2ph 長 ${word2ph.length}` +
-          `（bertText=${
-            JSON.stringify(bertText)
-          }）。文字トークナイズと word2ph の齟齬を疑う。`,
-      );
-    }
-    const { data, length } = tileBertToPhoneLevel(hidden, dims[0], word2ph);
-    if (length !== seqLen) {
-      throw new Error(
-        `Sbv2Adapter: bert 展開長 ${length} != 音素列長 ${seqLen}（word2ph 調整と add_blank の齟齬）`,
-      );
-    }
-    return data;
   }
 
   /** release 済みなら throw（fail loud）。合成系公開メソッドの入口で呼ぶ。 */
@@ -286,7 +280,7 @@ export class Sbv2Adapter implements ModelAdapter {
     );
     const seqLen = phoneIds.length; // 2*len+1
 
-    const bert = await this.#extractBert(
+    const bert = await this.#deberta.extract(
       input.bertText,
       input.baseWord2ph,
       seqLen,
@@ -374,6 +368,8 @@ export class Sbv2Adapter implements ModelAdapter {
    * - in-flight の synthesize / buildAcousticFeeds の完了を待ってから解放する
    *   （推論中のネイティブセッションを引き抜かない）。
    * - release 開始後の synthesize / buildAcousticFeeds は throw（fail loud）。
+   * - 共有された DebertaExtractor は解放しない（MUST NOT — 所有権は生成者。
+   *   他のアダプタが同じセッションで推論中かもしれない。docs/decisions/0005）。
    */
   release(): Promise<void> {
     this.#releasePromise ??= this.#release();
@@ -386,11 +382,10 @@ export class Sbv2Adapter implements ModelAdapter {
     while (this.#inflight.size > 0) {
       await Promise.allSettled([...this.#inflight]);
     }
-    // 片方が失敗しても両方の解放を試み、失敗は握りつぶさず投げ直す。
-    const results = await Promise.allSettled([
-      this.#acoustic.release(),
-      this.#bert.release(),
-    ]);
+    // 片方が失敗しても全ての解放を試み、失敗は握りつぶさず投げ直す。
+    const releases = [this.#acoustic.release()];
+    if (this.#ownsDeberta) releases.push(this.#deberta.release());
+    const results = await Promise.allSettled(releases);
     const failure = results.find(
       (result): result is PromiseRejectedResult => result.status === "rejected",
     );

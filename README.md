@@ -101,6 +101,42 @@ const adapter = await Sbv2NodeModelAdapter.createFromAivmx({
 });
 ```
 
+### 複数モデルの常駐（DeBERTa セッション共有）
+
+DeBERTa は全モデル共通の資産なので、複数モデルを同時に保持するときは共有抽出器を
+1 つ作って各アダプタへ `deberta` として渡します（bytes を渡すと従来どおりアダプタ毎に
+専用セッションが作られ、BERT の常駐メモリがモデル数倍になります）。実測（cpu）で
+DeBERTa セッションは 1 本 ≈490MB・モデルロードは共有で約 0.8s 短縮です。
+
+```typescript
+const { tokenizer, bertOnnxBytes } = await getDeberta();
+const deberta = await Sbv2NodeModelAdapter.createDeberta({
+  bertOnnxBytes,
+  tokenizer,
+  device: "cpu",
+});
+const adapterA = await Sbv2NodeModelAdapter.createFromAivmx({
+  aivmxBytes: bytesA,
+  deberta,
+  device: "cpu",
+});
+const adapterB = await Sbv2NodeModelAdapter.createFromAivmx({
+  aivmxBytes: bytesB,
+  deberta,
+  device: "cpu",
+});
+
+// アダプタを release しても共有 deberta は解放されない。
+// 解放は生成者の責任（全アダプタの release 後に呼ぶ）。
+await adapterA.release();
+await adapterB.release();
+await deberta.release();
+```
+
+ブラウザ側も同様に `Sbv2ModelAdapter.createDeberta`（EP は
+`sessionOptions.executionProviders`）が使えます。詳細な所有権契約は
+[ADR-0005](docs/decisions/0005-shared-deberta-extractor.md) を参照してください。
+
 ### 話者メタデータ・合成パラメータ
 
 サーバー実装（AivisSpeech / VOICEVOX 互換など）向けの API を備えています。詳細は

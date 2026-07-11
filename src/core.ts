@@ -73,6 +73,10 @@ export {
   Sbv2Adapter,
 } from "./runtime/adapter_core.ts";
 export {
+  type BertSource,
+  DebertaExtractor,
+} from "./runtime/deberta_extractor.ts";
+export {
   type SynthesizeOptions,
   synthesizeText,
 } from "./runtime/synthesize.ts";

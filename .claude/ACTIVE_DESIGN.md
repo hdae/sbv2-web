@@ -3,6 +3,17 @@
 Current design focus and a pitfalls index, so a reviewer or planner never starts
 cold. Keep this to a screenful.
 
+## Recently landed (2026-07-11, the 0.4.0 batch — unreleased)
+
+- **Shared DeBERTa (`DebertaExtractor`, ADR-0005).** BERT session + tokenizer +
+  phone-level tiling split out of `Sbv2Adapter`
+  (`src/runtime/deberta_extractor.ts`); adapters take a `BertSource` union —
+  `bertOnnxBytes`+`tokenizer` (owned, released with the adapter, fully backward
+  compatible) or `deberta` (shared, released ONLY by its creator).
+  `createDeberta` on both wrappers. Measured (cpu / ort-node): 1 session
+  ≈ 490MB; light-sbv2 4-model residency RSS 2986→1874MB (−1.1GB); model load
+  2.5s→1.7s.
+
 ## Recently landed (2026-07-10, the 0.2.0 batch)
 
 - **Review fixes.** styleVector rejects non-integer styleId / non-finite weight
@@ -36,7 +47,7 @@ cold. Keep this to a screenful.
   (leadingPunctuations + per-phrase moras + punctuations); any divergence
   breaks `sum(word2ph) === phones.length` and synthesis throws.
   Examples/browser maps the library source's bare imports via vite alias (JS)
-  + tsconfig paths (`_dist` d.ts) into `node_modules/@hdae/*` — same pattern
+  plus tsconfig paths (`_dist` d.ts) into `node_modules/@hdae/*` — same pattern
   for yomi and fetch-cache.
 - **getDeberta pins.** `DEBERTA_REVISION` + `PINNED_FILES` (sizes, model
   sha256) are baked for the default revision only; replacing the HF model
@@ -55,10 +66,18 @@ cold. Keep this to a screenful.
 - **Manifest strip is the default** — `/speakers`-style catalogs must not
   round-trip icons through `readAivmxManifest()` defaults; pass
   `{ stripAssets: false }` only where icons/samples are actually served.
+- **A shared `DebertaExtractor` MUST outlive its adapters** — adapters never
+  release it; the creator releases it after all adapters are done. Releasing
+  it early makes later synthesis throw (fail loud) by design (ADR-0005). With
+  a shared extractor, `sessionOptions` on adapter factories affects only the
+  acoustic session.
 
 ## Next / resume point
 
-- **v0.3.0 prepared (2026-07-10, tag/Release by owner)** — the yomi v0.4.0
+- **v0.4.0 pending (2026-07-11, feature landed on main; bump/tag/Release by
+  owner)** — shared `DebertaExtractor` (ADR-0005, additive). light-sbv2's
+  wiring is ready locally (via links) and commits after this ships to JSR.
+- **v0.3.0 released on JSR (2026-07-10)** — the yomi v0.4.0
   follow-up: `toSbv2PhoneTone` now packs REAL punctuation
   (`leadingPunctuations` + per-phrase `punctuations`, canonical `! ? … , . ' -`)
   instead of synthesizing `,`/`.` from pause classes (`pausePunct` was deleted

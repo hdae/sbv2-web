@@ -48,7 +48,11 @@ specifics (symbol table, tone +6, `add_blank`, BERT tiling, style vector, ONNX
 I/O) are confined to the `Sbv2Adapter` core (driven by an injected ORT backend).
 `synthesizeText` is the glue that assembles the model-agnostic `SynthInput`
 (`SynthInput` is a public contract — ADR-0003; `release()` lifecycle —
-ADR-0004). Asset acquisition: `getDeberta()` (`src/assets/deberta.ts`) fetches
+ADR-0004). The DeBERTa session + tokenizer live in `DebertaExtractor`
+(`src/runtime/deberta_extractor.ts`) — adapters either own one (bytes path) or
+share a caller-created one via the `deberta` option; a shared extractor is
+released by its creator, never by adapters (ADR-0005). Asset acquisition:
+`getDeberta()` (`src/assets/deberta.ts`) fetches
 the quantized DeBERTa + tokenizer set from HuggingFace, SHA-pinned and verified,
 via `@hdae/fetch-cache`; the dictionary comes from yomi's `getDictionary()`. See
 [ADR-0001](docs/decisions/0001-frontend-synth-responsibility-split.md).
