@@ -86,3 +86,36 @@ reported `webgpu backend not found`, even with `--unstable-webgpu`. Validate
 provider behavior and VRAM separately in the browser lab (`examples/browser`,
 WASM / WebGPU selectable), or via the node CLI with `--device webgpu` (ORT's
 native WebGPU EP) on a WebGPU-capable machine.
+
+## Inference-time Memory (2026-07-11)
+
+複数モデル常駐時の推論メモリと、sessionOptions で届く調整点の実測。
+
+### 共有 DeBERTa（ADR-0005）
+
+cpu / ort-node、実モデル 2 種（kohaku / mao）+ int4 DeBERTa（b256）。
+アダプタ毎に BERT セッションを複製する従来経路と、`createDeberta` の共有経路の比較:
+
+| metric                               |   複製（従来） |           共有 |
+| ------------------------------------ | -------------: | -------------: |
+| DeBERTa セッション 1 本の実コスト    |              — |        ≈ 490MB |
+| モデルロード時間                     |    2.4 – 2.6 s |    1.6 – 1.7 s |
+| light-sbv2 サーバー 4 モデル常駐 RSS |        2986 MB |        1874 MB |
+| 同・モデル追加あたりの傾き           | ≈ 565 MB/model | ≈ 210 MB/model |
+
+外部実測（RTX 5070 Ti / CUDA EP / ort 1.27, browser-tts 実験リポジトリ報告）:
+DeBERTa int4 の VRAM 常駐は 641MB/セッション（fp16 は 1379MB）。複製コストは
+EP を問わず「セッション数 × 常駐」で効くため、複数モデル常駐では共有が前提。
+
+### sessionOptions で届くメモリ knob
+
+`createFromAivmx` / `createFromOnnx` / `createDeberta` の `sessionOptions` は
+ORT の SessionOptions をそのまま両セッション（共有時は音響のみ）へ渡す。
+
+- `enableCpuMemArena: false` — **この合成ワークロード（cpu / 短文）では効果を
+  観測できなかった**（2 モデル常駐 2105MB vs 2104MB。差は誤差レベル）。
+- CUDA EP のアリーナ調整（`executionProviders: [{ name: "cuda", ... }]` 経由の
+  `arena_extend_strategy` / `gpu_mem_limit` 等）— 外部実測で「warmup 時に
+  アリーナが +324MB 掴む」報告があり調整余地があるが、**本環境に GPU が無く
+  未検証**。device と executionProviders は同時指定不可（withDevice の fail loud）
+  なので、EP 固有オプションを渡すときは executionProviders のみを使う。
