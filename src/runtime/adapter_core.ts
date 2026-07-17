@@ -356,6 +356,14 @@ export class Sbv2Adapter implements ModelAdapter {
     }
     const out = await this.#acoustic.run(feed, [OUTPUT_NAME]);
     const wave = out[OUTPUT_NAME];
+    // dtype を検査してから Float32Array として読む（synth_aivmx.py の
+    // np.asarray(raw, dtype=np.float32) 相当の防御。fp16 等が出力境界に漏れると
+    // .data が Uint16Array になり、Float32Array cast が黙って壊れた波形を通す）。
+    if (wave.type !== "float32") {
+      throw new Error(
+        `Sbv2Adapter: 音響出力 dtype が想定外 '${wave.type}'（float32 を期待）`,
+      );
+    }
     // [1, 1, N] float32 → reshape(-1)（synth_aivmx.py の raw.reshape(-1) と同じ扱い）。
     return wave.data as Float32Array;
   }

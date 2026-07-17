@@ -137,6 +137,15 @@ export class DebertaExtractor {
         }]（[seq_len, 1024] を期待）`,
       );
     }
+    // dtype も検査してから Float32Array として読む（synth_aivmx.py の
+    // .astype(np.float32) 相当の防御）。配布 fp16 DeBERTa は keep_io_types で出力境界が
+    // fp32 だが、別変換で fp16 等が出力境界に漏れると .data が Uint16Array になり、
+    // Float32Array cast が黙って壊れた特徴量を通す。
+    if (hiddenTensor.type !== "float32") {
+      throw new Error(
+        `DebertaExtractor: DeBERTa 出力 dtype が想定外 '${hiddenTensor.type}'（float32 を期待）`,
+      );
+    }
     const hidden = hiddenTensor.data as Float32Array;
     if (dims[0] !== word2ph.length) {
       throw new Error(

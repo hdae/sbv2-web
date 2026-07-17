@@ -36,7 +36,11 @@ const bertSession = (
     ["input_ids", "attention_mask"],
     runImpl ??
       (() => ({
-        output: { dims: [3, 1024], data: new Float32Array(3 * 1024) },
+        output: {
+          type: "float32",
+          dims: [3, 1024],
+          data: new Float32Array(3 * 1024),
+        },
       })),
   );
 
@@ -60,7 +64,11 @@ Deno.test("extract: word2ph に沿って音素レベル [1024*T] へ展開され
 Deno.test("extract: DeBERTa 出力 shape が [seq_len, 1024] でなければ throw", async () => {
   const extractor = await makeExtractor(
     bertSession(() => ({
-      output: { dims: [3, 512], data: new Float32Array(3 * 512) },
+      output: {
+        type: "float32",
+        dims: [3, 512],
+        data: new Float32Array(3 * 512),
+      },
     })),
   );
   await assertRejects(
@@ -71,10 +79,33 @@ Deno.test("extract: DeBERTa 出力 shape が [seq_len, 1024] でなければ thr
   await extractor.release();
 });
 
+Deno.test("extract: DeBERTa 出力 dtype が float32 でなければ throw", async () => {
+  // 実配布は keep_io_types で fp32 境界だが、別変換で fp16 が出力境界に漏れた状況を注入する。
+  const extractor = await makeExtractor(
+    bertSession(() => ({
+      output: {
+        type: "float16",
+        dims: [3, 1024],
+        data: new Uint16Array(3 * 1024),
+      },
+    })),
+  );
+  await assertRejects(
+    () => extractor.extract(BERT_TEXT, BASE_WORD2PH, SEQ_LEN),
+    Error,
+    "dtype が想定外",
+  );
+  await extractor.release();
+});
+
 Deno.test("extract: トークン数と word2ph 長の不一致は throw", async () => {
   const extractor = await makeExtractor(
     bertSession(() => ({
-      output: { dims: [4, 1024], data: new Float32Array(4 * 1024) },
+      output: {
+        type: "float32",
+        dims: [4, 1024],
+        data: new Float32Array(4 * 1024),
+      },
     })),
   );
   await assertRejects(
@@ -98,7 +129,13 @@ Deno.test("release: in-flight の extract 完了を待ってから解放する",
   await new Promise((resolve) => setTimeout(resolve, 0));
   assertEquals(session.released, 0);
 
-  finishRun({ output: { dims: [3, 1024], data: new Float32Array(3 * 1024) } });
+  finishRun({
+    output: {
+      type: "float32",
+      dims: [3, 1024],
+      data: new Float32Array(3 * 1024),
+    },
+  });
   await extracting;
   await released;
   assertEquals(session.released, 1);
