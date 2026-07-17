@@ -31,16 +31,32 @@ export const DEBERTA_REVISION = "3c6921bf67ee5f64a285f49df8636c1036b81881";
 
 const DEFAULT_CACHE_NAME = "sbv2-web-deberta";
 
-/** 既定リビジョンの実測ピン（サイズは HF tree API、model の sha256 は LFS メタ）。 */
+/**
+ * 既定リビジョンの実測ピン。サイズは HF tree API、sha256 は実バイト列のハッシュ
+ * （model.onnx は LFS oid と一致）。同サイズ別内容の差し替えを検出できるよう 4 ファイル
+ * すべてに sha256 を付ける（テキスト資産の片手落ちを無くす）。
+ */
 const PINNED_FILES = {
   model: {
     path: "model.onnx",
     expectedBytes: 240576205,
     sha256: "79002e00ea11bb41be2cd0d77e2a2608930cd8b502937101da31739fc6dabf96",
   },
-  vocab: { path: "vocab.txt", expectedBytes: 88151 },
-  cleanRanges: { path: "clean_ranges.json", expectedBytes: 585 },
-  meta: { path: "meta.json", expectedBytes: 662 },
+  vocab: {
+    path: "vocab.txt",
+    expectedBytes: 88151,
+    sha256: "902cbd7e218aaf23a72955533293ceac12fcc4e010ad98c0c14757b94ce7abb6",
+  },
+  cleanRanges: {
+    path: "clean_ranges.json",
+    expectedBytes: 585,
+    sha256: "81655f8443715f05e198d1b915f3b0a884e6795008f9a8331c900477159faae2",
+  },
+  meta: {
+    path: "meta.json",
+    expectedBytes: 662,
+    sha256: "05d4082e7b47589384587a2585d951b5f56c1c25e478e27f8fd66861e8524c6c",
+  },
 } as const;
 
 /** 別リビジョン指定時（ピンが適用できない）に取得する同名ファイル群。 */

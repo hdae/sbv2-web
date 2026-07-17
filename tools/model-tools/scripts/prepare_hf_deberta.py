@@ -9,6 +9,7 @@ public HuggingFace Hub model repository.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import shutil
 from pathlib import Path
@@ -17,6 +18,56 @@ from huggingface_hub import HfApi
 
 DEBERTA_BASE_REPO = "ku-nlp/deberta-v2-large-japanese-char-wwm"
 DEBERTA_ONNX_REPO = "tsukumijima/deberta-v2-large-japanese-char-wwm-onnx"
+
+# Keys mirror src/assets/deberta.ts PINNED_FILES. Tokenizer asset names are fixed;
+# the model uses the packaged filename (default model.onnx).
+_PIN_TOKENIZER_FILES = {
+    "vocab": "vocab.txt",
+    "cleanRanges": "clean_ranges.json",
+    "meta": "meta.json",
+}
+
+
+def _sha256_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _compute_pins(out_dir: Path, model_filename: str) -> dict[str, dict[str, object]]:
+    """Compute (expectedBytes, sha256) for all four PINNED_FILES entries at once.
+
+    Emitting the whole set from one place makes a partial pin update — e.g. bumping
+    only model.onnx while a tokenizer asset silently changes — hard to do by hand.
+    Pins are taken from the prepared out_dir, which is exactly what gets uploaded.
+    """
+    files = {"model": model_filename, **_PIN_TOKENIZER_FILES}
+    pins: dict[str, dict[str, object]] = {}
+    for key, name in files.items():
+        p = out_dir / name
+        if not p.exists():
+            raise FileNotFoundError(f"cannot pin missing file: {p}")
+        pins[key] = {
+            "path": name,
+            "expectedBytes": p.stat().st_size,
+            "sha256": _sha256_file(p),
+        }
+    return pins
+
+
+def _format_pins_ts(pins: dict[str, dict[str, object]]) -> str:
+    """Render pins as a src/assets/deberta.ts PINNED_FILES block for copy-paste."""
+    lines = ["const PINNED_FILES = {"]
+    for key, pin in pins.items():
+        lines.append(f"  {key}: {{")
+        lines.append(f'    path: "{pin["path"]}",')
+        lines.append(f"    expectedBytes: {pin['expectedBytes']},")
+        lines.append(f'    sha256: "{pin["sha256"]}",')
+        lines.append("  },")
+    lines.append("} as const;")
+    return "\n".join(lines)
 
 
 def _copy_required(src: Path, dst: Path, names: list[str]) -> None:
@@ -204,6 +255,9 @@ def prepare(
     _write_notice(out_dir, model_file=model_filename, info=info)
     _write_readme(out_dir, model_file=model_filename, repo_id=repo_id, info=info)
 
+    # 4 ファイル分のピン（bytes + sha256）を一括で計算し、片手落ちの更新をしにくくする。
+    pins = _compute_pins(out_dir, model_filename)
+
     manifest = {
         "variant": info["variant"],
         "quantization": info["quantization"],
@@ -216,6 +270,7 @@ def prepare(
         "license": "CC-BY-SA-4.0",
         "base_repo": DEBERTA_BASE_REPO,
         "onnx_source_repo": DEBERTA_ONNX_REPO,
+        "pins": pins,
         "benchmark": {
             "avg_cosine": info["avg_cosine"],
             "min_cosine": info["min_cosine"],
@@ -249,6 +304,9 @@ def main() -> None:
     else:
         result["uploaded"] = False
     print(json.dumps(result, ensure_ascii=False, indent=2))
+    # DEBERTA_REVISION 更新時に src/assets/deberta.ts へそのまま貼れる 4 ファイル分のピン。
+    print("\n// paste into src/assets/deberta.ts (all four pins at once):")
+    print(_format_pins_ts(result["pins"]))
 
 
 if __name__ == "__main__":
