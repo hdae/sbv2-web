@@ -2,7 +2,7 @@
 // (`./node`) entries. This barrel pulls in NO ONNX Runtime; each public entry
 // re-exports it together with its own backend adapter.
 
-export const VERSION = "0.4.0";
+export const VERSION = "0.4.1";
 
 export {
   type CleanRanges,
