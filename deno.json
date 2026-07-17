@@ -7,8 +7,8 @@
     "./node": "./src/node/mod.ts"
   },
   "imports": {
-    "@hdae/fetch-cache": "jsr:@hdae/fetch-cache@^0.3.0",
-    "@hdae/yomi": "jsr:@hdae/yomi@^0.4.0",
+    "@hdae/fetch-cache": "jsr:@hdae/fetch-cache@^0.3.1",
+    "@hdae/yomi": "jsr:@hdae/yomi@^0.4.2",
     "@std/assert": "jsr:@std/assert@^1.0.0",
     "onnxruntime-common": "npm:onnxruntime-common@1.27.0",
     "onnxruntime-web": "npm:onnxruntime-web@1.27.0",
