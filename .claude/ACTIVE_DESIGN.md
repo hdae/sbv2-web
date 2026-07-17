@@ -3,7 +3,7 @@
 Current design focus and a pitfalls index, so a reviewer or planner never starts
 cold. Keep this to a screenful.
 
-## Recently landed (2026-07-11, the 0.4.0 batch — unreleased)
+## Recently landed (2026-07-11, the 0.4.0 batch — released on JSR)
 
 - **Shared DeBERTa (`DebertaExtractor`, ADR-0005).** BERT session + tokenizer +
   phone-level tiling split out of `Sbv2Adapter`
@@ -38,11 +38,11 @@ cold. Keep this to a screenful.
 
 ## Pitfalls index
 
-- **Sibling deps resolve from JSR** (`@hdae/fetch-cache@^0.3.0`,
-  `@hdae/yomi@^0.4.0` — both published; the resolver picks yomi 0.4.1+ once
-  released, converging fetch-cache to a single 0.3.x). To co-develop unpublished sibling
-  changes, temporarily add `"links": ["../fetch-cache"]` etc. to deno.json,
-  but keep links OUT of commits — a missing links dir is a hard error on CI.
+- **Sibling deps resolve from JSR** (`@hdae/fetch-cache@^0.3.0` → 0.3.0,
+  `@hdae/yomi@^0.4.0` → 0.4.1; both published and the lock is converged). To
+  co-develop unpublished sibling changes, temporarily add
+  `"links": ["../fetch-cache"]` etc. to deno.json, but keep links OUT of commits
+  — a missing links dir is a hard error on CI.
 - **`toSbv2PhoneTone` MUST mirror yomi's `wordPhoneAlignment` order**
   (leadingPunctuations + per-phrase moras + punctuations); any divergence
   breaks `sum(word2ph) === phones.length` and synthesis throws.
@@ -74,9 +74,9 @@ cold. Keep this to a screenful.
 
 ## Next / resume point
 
-- **v0.4.0 pending (2026-07-11, feature landed on main; bump/tag/Release by
-  owner)** — shared `DebertaExtractor` (ADR-0005, additive). light-sbv2's
-  wiring is ready locally (via links) and commits after this ships to JSR.
+- **v0.4.0 released on JSR (2026-07-11, tag v0.4.0)** — shared
+  `DebertaExtractor` (ADR-0005, additive). light-sbv2 can now pin the published
+  0.4.0 and drop its links-based wiring.
 - **v0.3.0 released on JSR (2026-07-10)** — the yomi v0.4.0
   follow-up: `toSbv2PhoneTone` now packs REAL punctuation
   (`leadingPunctuations` + per-phrase `punctuations`, canonical `! ? … , . ' -`)
