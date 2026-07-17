@@ -74,6 +74,11 @@ cold. Keep this to a screenful.
 
 ## Next / resume point
 
+- **v0.4.1 released on JSR (2026-07-18, tag v0.4.1)** — hardening patch, no
+  API changes: ONNX output dtype validation (fail loud on non-float32 outputs),
+  sha256 pins for the three tokenizer assets (vocab / clean_ranges / meta),
+  `fromAivmx` bert-source exclusivity preserved via rest-split. Dep floors:
+  yomi `^0.4.2`, fetch-cache `^0.3.1` (follow-the-train only).
 - **v0.4.0 released on JSR (2026-07-11, tag v0.4.0)** — shared
   `DebertaExtractor` (ADR-0005, additive). light-sbv2 can now pin the published
   0.4.0 and drop its links-based wiring.
