@@ -307,6 +307,28 @@ Deno.test("fromOnnx: deberta と bertOnnxBytes/tokenizer の同時指定は thro
   await extractor.release();
 });
 
+Deno.test("fromAivmx: deberta と bertOnnxBytes/tokenizer の同時指定は throw", async () => {
+  const extractor = await makeExtractor(bertSession());
+  const { backend, sessions } = createMockBackend([]);
+  // fromAivmx は 3 キーを判別せず素通しするので、JS で 3 つ渡すと bytes/tokenizer が
+  // 黙って捨てられず resolveBertSource の同時指定ガードに届く（型は判別 union のまま）。
+  const conflicting = {
+    aivmxBytes: new Uint8Array(),
+    metadata: { styleVectorsNpy: buildStyleNpy(2) },
+    sampleRate: 44100,
+    bertOnnxBytes: new Uint8Array(),
+    tokenizer: TOKENIZER,
+    deberta: extractor,
+  } as unknown as Parameters<typeof Sbv2Adapter.fromAivmx>[1];
+  await assertRejects(
+    () => Sbv2Adapter.fromAivmx(backend, conflicting),
+    Error,
+    "同時指定できない",
+  );
+  assertEquals(sessions.length, 0);
+  await extractor.release();
+});
+
 Deno.test("fromOnnx: BERT 供給なし（bytes も deberta も無い）は throw", async () => {
   const { backend, sessions } = createMockBackend([]);
   // 型で防いでいる誤用を JS 呼び出し相当で検証する（テスト境界の限定 cast）。

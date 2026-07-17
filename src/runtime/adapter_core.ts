@@ -226,9 +226,20 @@ export class Sbv2Adapter implements ModelAdapter {
       sessionOptions?: OrtSessionOptions;
     } & BertSource,
   ): Promise<Sbv2Adapter> {
-    const metadata = args.metadata ?? readAivmxMetadata(args.aivmxBytes);
-    const sampleRate = args.sampleRate ??
-      metadata.hyperParameters?.samplingRate;
+    // BertSource（deberta / bertOnnxBytes / tokenizer）は判別せず rest でそのまま抜き出して
+    // fromOnnx へ渡す。ここで `args.deberta !== undefined ?` と事前判別すると、型を欺く JS
+    // 呼び出しが 3 キー全部を渡したとき bytes/tokenizer が黙って捨てられ、resolveBertSource の
+    // 同時指定ガードに到達しない。検証は resolveBertSource の一箇所に集約する。
+    const {
+      aivmxBytes,
+      metadata: metadataArg,
+      sampleRate: sampleRateArg,
+      scalars,
+      sessionOptions,
+      ...bertSource
+    } = args;
+    const metadata = metadataArg ?? readAivmxMetadata(aivmxBytes);
+    const sampleRate = sampleRateArg ?? metadata.hyperParameters?.samplingRate;
     if (sampleRate === undefined) {
       throw new Error(
         "Sbv2Adapter: sampleRate を決められない（aivmx に aivm_hyper_parameters が無い。" +
@@ -236,17 +247,13 @@ export class Sbv2Adapter implements ModelAdapter {
       );
     }
     return await Sbv2Adapter.fromOnnx(backend, {
-      acousticOnnxBytes: args.aivmxBytes,
+      ...bertSource,
+      acousticOnnxBytes: aivmxBytes,
       styleVectorsNpy: metadata.styleVectorsNpy,
       sampleRate,
-      scalars: args.scalars,
+      scalars,
       hyperParameters: metadata.hyperParameters,
-      sessionOptions: args.sessionOptions,
-      // BertSource は判別を保ったまま素通しする（検証は fromOnnx 側の一箇所で行う）。
-      ...(args.deberta !== undefined ? { deberta: args.deberta } : {
-        bertOnnxBytes: args.bertOnnxBytes,
-        tokenizer: args.tokenizer,
-      }),
+      sessionOptions,
     });
   }
 
